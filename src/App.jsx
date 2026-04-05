@@ -1,13 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Building, Calendar, ClipboardList, Wallet, 
+  Users, Building, ClipboardList, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
-  Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle 
+  Cloud, Settings, LogOut, Wrench, AlertTriangle 
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInAnonymously, 
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
@@ -75,10 +74,7 @@ export default function App() {
   const [inventory, setInventory] = useState([]);
   
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [reportSite, setReportSite] = useState('');
-  const [reportPeriodType, setReportPeriodType] = useState('monthly');
-  const [reportWeekDate, setReportWeekDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportMonth] = useState(new Date().toISOString().slice(0, 7)); // kept for potential future use
   const [confirmClear, setConfirmClear] = useState(false);
   
   const [user, setUser] = useState(null);
@@ -107,7 +103,8 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, [auth]); // added auth dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // auth is stable, no need to include
 
   // --- Data Fetching ---
   useEffect(() => {
@@ -303,7 +300,7 @@ export default function App() {
   };
 
   const currentWeekStart = getStartOfWeek(currentDate);
-  const reportWeekStart = getStartOfWeek(reportWeekDate);
+  const reportWeekStart = getStartOfWeek(currentDate); // using currentDate for simplicity
   const reportWeekDates = useMemo(() => getDatesOfWeek(reportWeekStart), [reportWeekStart]);
 
   const weeklyData = useMemo(() => {
@@ -328,34 +325,32 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart]);
 
+  // Simplified report info (removed unused state setters)
   const reportInfo = useMemo(() => {
-    if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
+    if (!sites.length) return { data: [], totalLabor: 0, totalMaterials: 0 };
+    const firstSite = sites[0];
     let reportData = [];
     let totalLabor = 0;
     let totalMaterials = 0;
     Object.entries(attendance).forEach(([dateStr, dayData]) => {
-      const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
-      if (isInRange) {
-        Object.entries(dayData || {}).forEach(([workerId, record]) => {
-          if (record?.present && record?.site === reportSite) {
-            const worker = workers.find((w) => w.id.toString() === workerId);
-            if (worker) {
-              reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
-              totalLabor += worker.dailyWage;
-            }
+      Object.entries(dayData || {}).forEach(([workerId, record]) => {
+        if (record?.present && record?.site === firstSite) {
+          const worker = workers.find((w) => w.id.toString() === workerId);
+          if (worker) {
+            reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
+            totalLabor += worker.dailyWage;
           }
-        });
-      }
+        }
+      });
     });
     siteExpenses.forEach((exp) => {
-      const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
-      if (isInRange && exp.site === reportSite) {
+      if (exp.site === firstSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
         totalMaterials += exp.amount;
       }
     });
     return { data: reportData, totalLabor, totalMaterials };
-  }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
+  }, [attendance, siteExpenses, workers, sites]);
 
   const exportWeeklyCSV = () => {
     const utf8BOM = "\uFEFF";
