@@ -28,19 +28,19 @@ import {
 // FIREBASE CONFIGURATION (Fill in the blanks when ready)
 // =========================================================
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_APP_ID,
-  measurementId: process.env.REACT_APP_MEASUREMENT_ID
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: "",
+  measurementId: ""
 };
 
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
-let auth: any, db: any;
+let auth, db;
 const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey.length > 0;
 
 if (isConfigValid) {
@@ -56,7 +56,7 @@ if (isConfigValid) {
 const appId = "contractor_tracker_v1";
 
 export default function App() {
-  const [role, setRole] = useState<string | null>(null); 
+  const [role, setRole] = useState(null); 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -70,9 +70,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily');
   const [workers, setWorkers] = useState([]);
   const [sites, setSites] = useState([]);
-  const [attendance, setAttendance] = useState<any>({});
+  const [attendance, setAttendance] = useState({});
   const [siteExpenses, setSiteExpenses] = useState([]);
-  const [weeklyOverrides, setWeeklyOverrides] = useState<any>({}); 
+  const [weeklyOverrides, setWeeklyOverrides] = useState({}); 
   const [inventory, setInventory] = useState([]);
   
   // UI States
@@ -93,7 +93,7 @@ export default function App() {
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      setUser(authUser as any);
+      setUser(authUser);
       if (authUser) {
         try {
           const adminRef = collection(db, 'admins');
@@ -157,7 +157,7 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, [workers, sites, attendance, siteExpenses, weeklyOverrides, inventory, isCloudSynced, user, role]);
   
-  const handleSecureLogin = async (e: React.FormEvent) => {
+  const handleSecureLogin = async (e) => {
     e.preventDefault();
     if (!auth) return;
     setLoginError('');
@@ -181,7 +181,7 @@ export default function App() {
       
       setLoginEmail('');
       setLoginPassword('');
-    } catch (error: any) {
+    } catch (error) {
       console.error("Login error:", error);
       setLoginError('Incorrect credentials or account not found.');
     }
@@ -193,7 +193,7 @@ export default function App() {
     setLoginPassword('');
   };
 
-  const handleAdminSetup = async (e: React.FormEvent) => {
+  const handleAdminSetup = async (e) => {
     e.preventDefault();
     if (!auth) return;
     setSetupError('');
@@ -218,14 +218,14 @@ export default function App() {
       });
 
       setTimeout(() => setShowAdminSetup(false), 2000);
-    } catch (error: any) {
+    } catch (error) {
       setSetupError(error.message);
     }
   };
 
-  const handleAttendanceChange = (workerId: any, field: string, value: any) => {
+  const handleAttendanceChange = (workerId, field, value) => {
     if (role !== 'admin') return; 
-    setAttendance((prev: any) => {
+    setAttendance((prev) => {
       const dayData = prev[currentDate] || {};
       const workerData = dayData[workerId] || { present: false, site: '', advance: 0 };
       return {
@@ -235,98 +235,98 @@ export default function App() {
     });
   };
 
-  const handleAddWorker = (e: any) => {
+  const handleAddWorker = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const name = formData.get('name') as string;
-    const wage = parseInt(formData.get('wage') as string, 10);
+    const name = formData.get('name');
+    const wage = parseInt(formData.get('wage'), 10);
     if (name && !isNaN(wage)) {
-      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }] as any);
+      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }]);
       e.target.reset();
     }
   };
 
-  const handleAddSite = (e: any) => {
+  const handleAddSite = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site') as string;
-    if (site && !sites.includes(site as never)) {
-      setSites([...sites, site] as any);
+    const site = formData.get('site');
+    if (site && !sites.includes(site)) {
+      setSites([...sites, site]);
       e.target.reset();
     }
   };
 
-  const handleAddExpense = (e: any) => {
+  const handleAddExpense = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site') as string;
-    const desc = formData.get('desc') as string;
-    const amount = parseInt(formData.get('amount') as string, 10);
+    const site = formData.get('site');
+    const desc = formData.get('desc');
+    const amount = parseInt(formData.get('amount'), 10);
     if (site && desc && !isNaN(amount)) {
-      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }] as any);
+      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }]);
       e.target.reset();
     }
   };
 
-  const handleDeleteWorker = (id: any) => { if (role === 'admin') setWorkers(workers.filter((w: any) => w.id !== id)); };
-  const handleDeleteSite = (site: string) => { if (role === 'admin') setSites(sites.filter((s: any) => s !== site)); };
+  const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
+  const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
 
-  const handleAddTool = (e: any) => {
+  const handleAddTool = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const name = formData.get('name') as string;
+    const name = formData.get('name');
     if (name) {
-      setInventory([...inventory, { id: Date.now(), name, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }] as any);
+      setInventory([...inventory, { id: Date.now(), name, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }]);
       e.target.reset();
     }
   };
 
-  const handleAssignTool = (e: any) => {
+  const handleAssignTool = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const toolId = parseInt(formData.get('toolId') as string, 10);
-    const workerId = formData.get('workerId') as string;
-    const site = formData.get('site') as string;
+    const toolId = parseInt(formData.get('toolId'), 10);
+    const workerId = formData.get('workerId');
+    const site = formData.get('site');
     if (toolId && workerId && site) {
-      const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
-      setInventory(inventory.map((tool: any) => 
+      const worker = workers.find((w) => w.id.toString() === workerId);
+      setInventory(inventory.map((tool) => 
         tool.id === toolId 
         ? { ...tool, status: 'Assigned', assignedWorker: worker?.name || 'Unknown', assignedSite: site, checkoutDate: currentDate } 
         : tool
-      ) as any);
+      ));
       e.target.reset();
     }
   };
 
-  const handleReturnTool = (toolId: any) => {
+  const handleReturnTool = (toolId) => {
     if (role !== 'admin') return;
-    setInventory(inventory.map((tool: any) => 
+    setInventory(inventory.map((tool) => 
       tool.id === toolId 
       ? { ...tool, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' } 
       : tool
-    ) as any);
+    ));
   };
 
-  const handleDeleteTool = (toolId: any) => {
+  const handleDeleteTool = (toolId) => {
     if (role !== 'admin') return;
-    setInventory(inventory.filter((t: any) => t.id !== toolId));
+    setInventory(inventory.filter((t) => t.id !== toolId));
   };
 
   const handleClearData = () => {
     setAttendance({});
-    setSiteExpenses([]);
+    setSiteExpenses({});
     setWeeklyOverrides({});
     setConfirmClear(false);
   };
 
-  const getStartOfWeek = (dateString: string) => {
+  const getStartOfWeek = (dateString) => {
     const date = new Date(dateString);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(date.setDate(diff)).toISOString().split('T')[0];
   };
 
-  const getDatesOfWeek = (startDate: string) => {
+  const getDatesOfWeek = (startDate) => {
     const dates = [];
     let start = new Date(startDate);
     for (let i = 0; i < 7; i++) {
@@ -344,11 +344,11 @@ export default function App() {
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
     const weekOverrides = weeklyOverrides[currentWeekStart] || {};
-    return workers.map((worker: any) => {
+    return workers.map((worker) => {
       let daysWorked = 0;
       let totalAdvancesThisWeek = 0;
       weekDates.forEach(date => {
-        const dayRecord = (attendance as any)[date]?.[worker.id];
+        const dayRecord = attendance[date]?.[worker.id];
         if (dayRecord?.present) daysWorked += 1;
         if (dayRecord?.advance) totalAdvancesThisWeek += parseInt(dayRecord.advance || 0, 10);
       });
@@ -368,11 +368,11 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart, weeklyOverrides]);
 
-  const handleOverrideChange = (workerId: string, field: string, value: any) => {
-    setWeeklyOverrides((prev: any) => {
+  const handleOverrideChange = (workerId, field, value) => {
+    setWeeklyOverrides((prev) => {
       const weekData = prev[currentWeekStart] || {};
       const workerOverride = weekData[workerId] || {
-        finalPayout: weeklyData.find((w: any) => w.id === workerId)?.calcFinalPayout || 0
+        finalPayout: weeklyData.find((w) => w.id === workerId)?.calcFinalPayout || 0
       };
       return {
         ...prev,
@@ -381,8 +381,8 @@ export default function App() {
     });
   };
 
-  const handleClearOverride = (workerId: string) => {
-    setWeeklyOverrides((prev: any) => {
+  const handleClearOverride = (workerId) => {
+    setWeeklyOverrides((prev) => {
       if (!prev[currentWeekStart]) return prev;
       const weekData = { ...prev[currentWeekStart] };
       delete weekData[workerId];
@@ -392,15 +392,15 @@ export default function App() {
 
   const reportInfo = useMemo(() => {
     if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
-    let reportData: any[] = [];
+    let reportData = [];
     let totalLabor = 0;
     let totalMaterials = 0;
-    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+    Object.entries(attendance).forEach(([dateStr, dayData]) => {
       const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
       if (isInRange) {
-        Object.entries(dayData || {}).forEach(([workerId, record]: [string, any]) => {
+        Object.entries(dayData || {}).forEach(([workerId, record]) => {
           if (record?.present && record?.site === reportSite) {
-            const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+            const worker = workers.find((w) => w.id.toString() === workerId);
             if (worker) {
               reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
               totalLabor += worker.dailyWage;
@@ -409,7 +409,7 @@ export default function App() {
         });
       }
     });
-    siteExpenses.forEach((exp: any) => {
+    siteExpenses.forEach((exp) => {
       const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
       if (isInRange && exp.site === reportSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
@@ -421,16 +421,16 @@ export default function App() {
   }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
 
   const availableYears = useMemo(() => {
-    const years = new Set<string>();
+    const years = new Set();
     Object.keys(attendance).forEach(date => date && years.add(date.substring(0, 4)));
-    siteExpenses.forEach((exp: any) => exp.date && years.add(exp.date.substring(0, 4)));
+    siteExpenses.forEach((exp) => exp.date && years.add(exp.date.substring(0, 4)));
     return Array.from(years).sort((a, b) => b.localeCompare(a));
   }, [attendance, siteExpenses]);
 
   // --- Exports ---
   const utf8BOM = "\uFEFF"; 
   
-  const escapeCSV = (str: any) => {
+  const escapeCSV = (str) => {
     if (str == null) return '';
     const stringValue = String(str);
     if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
@@ -471,7 +471,7 @@ export default function App() {
 
   const exportInventoryCSV = () => {
     const headers = ['Tool Name', 'Status', 'Assigned Worker', 'Assigned Site', 'Checkout Date'];
-    const rows = inventory.map((t: any) => [escapeCSV(t.name), escapeCSV(t.status), escapeCSV(t.assignedWorker || 'None'), escapeCSV(t.assignedSite || 'None'), t.checkoutDate || 'N/A']);
+    const rows = inventory.map((t) => [escapeCSV(t.name), escapeCSV(t.status), escapeCSV(t.assignedWorker || 'None'), escapeCSV(t.assignedSite || 'None'), t.checkoutDate || 'N/A']);
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -484,11 +484,11 @@ export default function App() {
 
   const exportMasterAttendanceCSV = () => {
     const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)'];
-    const rows: any[] = [];
-    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+    const rows = [];
+    Object.entries(attendance).forEach(([dateStr, dayData]) => {
       if (exportYear !== 'All' && !dateStr.startsWith(exportYear)) return;
-      Object.entries(dayData).forEach(([workerId, record]: [string, any]) => {
-        const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+      Object.entries(dayData).forEach(([workerId, record]) => {
+        const worker = workers.find((w) => w.id.toString() === workerId);
         if (worker) rows.push([dateStr, escapeCSV(worker.name), escapeCSV(record.site || 'None'), record.present ? 'Yes' : 'No', record.advance || 0]);
       });
     });
@@ -505,8 +505,8 @@ export default function App() {
 
   const exportMasterExpensesCSV = () => {
     const headers = ['Date', 'Site', 'Description', 'Amount (₹)'];
-    const filteredExpenses = exportYear === 'All' ? siteExpenses : siteExpenses.filter((exp: any) => exp.date.startsWith(exportYear));
-    const rows = filteredExpenses.map((exp: any) => [exp.date, escapeCSV(exp.site), escapeCSV(exp.description), exp.amount]);
+    const filteredExpenses = exportYear === 'All' ? siteExpenses : siteExpenses.filter((exp) => exp.date.startsWith(exportYear));
+    const rows = filteredExpenses.map((exp) => [exp.date, escapeCSV(exp.site), escapeCSV(exp.description), exp.amount]);
     rows.sort((a, b) => b[0].localeCompare(a[0]));
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -613,7 +613,7 @@ export default function App() {
                 <tbody>
                   {workers.length === 0 ? (
                     <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
-                  ) : workers.map((worker: any) => {
+                  ) : workers.map((worker) => {
                     const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
                     return (
                       <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
@@ -624,7 +624,7 @@ export default function App() {
                         <td className="p-4">
                           <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
                             <option value="">Select Site...</option>
-                            {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                            {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
                           </select>
                         </td>
                         <td className="p-4">
@@ -642,7 +642,7 @@ export default function App() {
                 <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
                   <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
                     <option value="">Select Site...</option>
-                    {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                    {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
                   </select>
                   <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
                   <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
@@ -673,7 +673,7 @@ export default function App() {
                   <tr><th className="p-4 border-b">Worker</th><th className="p-4 text-center border-b">Days</th><th className="p-4 text-right border-b">Earned</th><th className="p-4 text-right border-b">Advance</th><th className="p-4 text-right border-b font-bold text-slate-800 bg-slate-200">Final Payout</th></tr>
                 </thead>
                 <tbody className="text-sm">
-                  {weeklyData.map((w: any) => (
+                  {weeklyData.map((w) => (
                     <tr key={w.id} className="border-b hover:bg-slate-50">
                       <td className="p-4 font-bold">{w.name}</td>
                       <td className="p-4 text-center font-bold text-blue-600">{w.daysWorked}</td>
@@ -707,7 +707,7 @@ export default function App() {
               <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                 <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white font-bold"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select>
                 {reportPeriodType === 'monthly' ? <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" /> : <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" />}
-                <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="flex-grow p-2 border border-slate-300 rounded-lg text-sm bg-white"><option value="">Choose Site...</option>{sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}</select>
+                <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="flex-grow p-2 border border-slate-300 rounded-lg text-sm bg-white"><option value="">Choose Site...</option>{sites.map((s, i) => <option key={i} value={s}>{s}</option>)}</select>
               </div>
             </div>
             {reportSite ? (
@@ -736,9 +736,9 @@ export default function App() {
               <div className="flex-1 space-y-4">
                 <h2 className="text-sm font-black flex items-center gap-2 text-slate-800"><Wrench size={16} /> CHECKOUT TOOL</h2>
                 <form onSubmit={handleAssignTool} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <select required name="toolId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Select Tool...</option>{inventory.filter((t: any) => t.status === 'Available').map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-                  <select required name="workerId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Worker...</option>{workers.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
-                  <select required name="site" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Site...</option>{sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}</select>
+                  <select required name="toolId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Select Tool...</option>{inventory.filter((t) => t.status === 'Available').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                  <select required name="workerId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Worker...</option>{workers.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+                  <select required name="site" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Site...</option>{sites.map((s, i) => <option key={i} value={s}>{s}</option>)}</select>
                   <button type="submit" className="sm:col-span-3 bg-slate-800 text-white font-bold py-2 rounded text-sm hover:bg-slate-900 transition-colors">Assign to Site</button>
                 </form>
               </div>
@@ -754,7 +754,7 @@ export default function App() {
                 <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead><tr className="bg-slate-100 text-slate-600 text-[10px] uppercase tracking-widest"><th className="p-4 border-b">Tool</th><th className="p-4 border-b text-center">Status</th><th className="p-4 border-b">Assigned To</th><th className="p-4 border-b">Site</th><th className="p-4 border-b text-center">Action</th></tr></thead>
                   <tbody className="text-sm">
-                    {inventory.map((t: any) => (
+                    {inventory.map((t) => (
                       <tr key={t.id} className="border-b hover:bg-slate-50 transition-colors"><td className="p-4 font-bold">{t.name}</td><td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black ${t.status === 'Available' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{t.status.toUpperCase()}</span></td><td className="p-4 font-medium text-slate-600">{t.assignedWorker || '-'}</td><td className="p-4 font-medium text-slate-600">{t.assignedSite || '-'}</td><td className="p-4 text-center">
                         {t.status === 'Assigned' ? <button onClick={() => handleReturnTool(t.id)} className="bg-indigo-600 text-white px-3 py-1 rounded text-[10px] font-bold hover:bg-indigo-700 shadow-sm transition-colors">RETURN</button> : <button onClick={() => handleDeleteTool(t.id)} className="text-red-300 hover:text-red-500 p-1 transition-colors"><Trash2 size={16} /></button>}
                       </td></tr>
@@ -777,7 +777,7 @@ export default function App() {
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold shadow-sm flex items-center justify-center gap-2"><Plus size={16} /> Add Worker</button>
               </form>
               <div className="mt-4 space-y-1">
-                {workers.map((w: any) => (
+                {workers.map((w) => (
                   <div key={w.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{w.name} (₹{w.dailyWage})</span>
                     <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
@@ -794,8 +794,8 @@ export default function App() {
               <div className="mt-4 space-y-1">
                 {sites.map((s, i) => (
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
-                    <span className="text-sm font-medium">{s as string}</span>
-                    <button onClick={() => handleDeleteSite(s as string)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
+                    <span className="text-sm font-medium">{s}</span>
+                    <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
