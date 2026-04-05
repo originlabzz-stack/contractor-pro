@@ -1,9 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Building, Calendar, ClipboardList, Wallet, IndianRupee, 
-  Plus, Save, FileSpreadsheet, Receipt, Trash2, Download, 
-  Cloud, Edit2, X, RotateCcw, Settings, Database, 
-  AlertTriangle, Lock, Eye, LogOut, Wrench 
+  Users, Building, Calendar, ClipboardList, Wallet, 
+  Plus, FileSpreadsheet, Receipt, Trash2, Download, 
+  Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle 
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -27,7 +26,6 @@ import {
 // =========================================================
 // FIREBASE CONFIGURATION
 // =========================================================
-// Fixed: Replaced process.env with empty strings to prevent ReferenceError in browser
 const firebaseConfig = {
   apiKey: "",
   authDomain: "",
@@ -41,12 +39,12 @@ const firebaseConfig = {
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
-let app, auth, db;
+let auth: any, db: any;
 const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey.length > 0;
 
 if (isConfigValid) {
   try {
-    app = initializeApp(firebaseConfig);
+    const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } catch (e) {
@@ -57,29 +55,27 @@ if (isConfigValid) {
 const appId = "contractor_tracker_v1";
 
 export default function App() {
-  const [role, setRole] = useState(null); 
+  const [role, setRole] = useState<string | null>(null); 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   
   const [showAdminSetup, setShowAdminSetup] = useState(false);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
   const [setupError, setSetupError] = useState('');
-  const [setupSuccess, setSetupSuccess] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily');
   const [workers, setWorkers] = useState([]);
   const [sites, setSites] = useState([]);
-  const [attendance, setAttendance] = useState({});
+  const [attendance, setAttendance] = useState<any>({});
   const [siteExpenses, setSiteExpenses] = useState([]);
-  const [weeklyOverrides, setWeeklyOverrides] = useState({});
+  const [weeklyOverrides, setWeeklyOverrides] = useState({}); 
   const [inventory, setInventory] = useState([]);
   
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7)); 
+  const [reportMonth] = useState(new Date().toISOString().slice(0, 7)); 
   const [reportSite, setReportSite] = useState('');
   const [reportPeriodType, setReportPeriodType] = useState('monthly'); 
   const [reportWeekDate, setReportWeekDate] = useState(new Date().toISOString().split('T')[0]);
@@ -93,14 +89,19 @@ export default function App() {
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      setUser(authUser);
+      setUser(authUser as any);
       if (authUser) {
-        const adminRef = collection(db, 'admins');
-        const adminQuery = query(adminRef, where('uid', '==', authUser.uid));
-        const adminSnap = await getDocs(adminQuery);
-        if (adminSnap.size > 0) {
-          setRole('admin');
-        } else {
+        try {
+          const adminRef = collection(db, 'admins');
+          const adminQuery = query(adminRef, where('uid', '==', authUser.uid));
+          const adminSnap = await getDocs(adminQuery);
+          if (adminSnap.size > 0) {
+            setRole('admin');
+          } else {
+            setRole('viewer');
+          }
+        } catch (e) {
+          console.error("Auth role check error:", e);
           setRole('viewer');
         }
       }
@@ -152,16 +153,14 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, [workers, sites, attendance, siteExpenses, weeklyOverrides, inventory, isCloudSynced, user, role]);
   
-  const handleSecureLogin = async (e) => {
+  const handleSecureLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
     setLoginError('');
-    setIsLoading(true);
 
     try {
       if (!loginEmail.trim() || !loginPassword) {
         setLoginError('Please enter both email and password');
-        setIsLoading(false);
         return;
       }
 
@@ -179,7 +178,7 @@ export default function App() {
       
       setLoginEmail('');
       setLoginPassword('');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
       if (error.code === 'auth/user-not-found') {
         setLoginError('Email not found.');
@@ -188,8 +187,6 @@ export default function App() {
       } else {
         setLoginError('Login failed.');
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -199,22 +196,18 @@ export default function App() {
     setLoginPassword('');
   };
 
-  const handleAdminSetup = async (e) => {
+  const handleAdminSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
     setSetupError('');
-    setSetupSuccess('');
-    setIsLoading(true);
 
     try {
       if (!adminEmail.trim() || !adminPassword || !adminPasswordConfirm) {
         setSetupError('Please fill in all fields');
-        setIsLoading(false);
         return;
       }
       if (adminPassword !== adminPasswordConfirm) {
         setSetupError('Passwords do not match');
-        setIsLoading(false);
         return;
       }
 
@@ -227,18 +220,15 @@ export default function App() {
         isAdmin: true
       });
 
-      setSetupSuccess('Admin account created successfully!');
       setTimeout(() => setShowAdminSetup(false), 2000);
-    } catch (error) {
+    } catch (error: any) {
       setSetupError(error.message);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleAttendanceChange = (workerId, field, value) => {
+  const handleAttendanceChange = (workerId: any, field: string, value: any) => {
     if (role !== 'admin') return; 
-    setAttendance((prev) => {
+    setAttendance((prev: any) => {
       const dayData = prev[currentDate] || {};
       const workerData = dayData[workerId] || { present: false, site: '', advance: 0 };
       return {
@@ -248,96 +238,56 @@ export default function App() {
     });
   };
 
-  const handleAddWorker = (e) => {
+  const handleAddWorker = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const name = formData.get('name');
-    const wage = parseInt(formData.get('wage'), 10);
+    const name = formData.get('name') as string;
+    const wage = parseInt(formData.get('wage') as string, 10);
     if (name && !isNaN(wage)) {
-      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }]);
+      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }] as any);
       e.target.reset();
     }
   };
 
-  const handleAddSite = (e) => {
+  const handleAddSite = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site');
+    const site = formData.get('site') as string;
     if (site) {
-      setSites([...sites, site]);
+      setSites([...sites, site] as any);
       e.target.reset();
     }
   };
 
-  const handleAddExpense = (e) => {
+  const handleAddExpense = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site');
-    const desc = formData.get('desc');
-    const amount = parseInt(formData.get('amount'), 10);
+    const site = formData.get('site') as string;
+    const desc = formData.get('desc') as string;
+    const amount = parseInt(formData.get('amount') as string, 10);
     if (site && desc && !isNaN(amount)) {
-      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }]);
+      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }] as any);
       e.target.reset();
     }
   };
 
-  const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
-  const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
-  const handleDeleteExpense = (id) => { if (role === 'admin') setSiteExpenses(siteExpenses.filter((e) => e.id !== id)); };
-
-  const handleAssignTool = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const toolId = parseInt(formData.get('toolId'), 10);
-    const workerId = formData.get('workerId');
-    const site = formData.get('site');
-    if (toolId && workerId && site) {
-      const worker = workers.find((w) => w.id.toString() === workerId);
-      if (worker) {
-        setInventory(inventory.map((tool) => 
-          tool.id === toolId 
-          ? { ...tool, status: 'Assigned', assignedWorker: worker.name, assignedSite: site, checkoutDate: currentDate } 
-          : tool
-        ));
-        e.target.reset();
-      }
-    }
-  };
-
-  const handleReturnTool = (toolId) => {
-    if (role !== 'admin') return;
-    setInventory(inventory.map((tool) => 
-      tool.id === toolId 
-      ? { ...tool, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' } 
-      : tool
-    ));
-  };
-
-  const handleAddTool = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const toolName = formData.get('toolName');
-    if (toolName) {
-      setInventory([...inventory, { id: Date.now(), name: toolName, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }]);
-      e.target.reset();
-    }
-  };
+  const handleDeleteWorker = (id: any) => { if (role === 'admin') setWorkers(workers.filter((w: any) => w.id !== id)); };
+  const handleDeleteSite = (site: string) => { if (role === 'admin') setSites(sites.filter((s: any) => s !== site)); };
 
   const handleClearData = () => {
     setAttendance({});
     setSiteExpenses([]);
-    setWeeklyOverrides({});
     setConfirmClear(false);
   };
 
-  const getStartOfWeek = (dateString) => {
+  const getStartOfWeek = (dateString: string) => {
     const date = new Date(dateString);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(date.setDate(diff)).toISOString().split('T')[0];
   };
 
-  const getDatesOfWeek = (startDate) => {
+  const getDatesOfWeek = (startDate: string) => {
     const dates = [];
     let start = new Date(startDate);
     for (let i = 0; i < 7; i++) {
@@ -353,11 +303,11 @@ export default function App() {
 
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
-    return workers.map((worker) => {
+    return workers.map((worker: any) => {
       let daysWorked = 0;
       let totalAdvancesThisWeek = 0;
       weekDates.forEach(date => {
-        const dayRecord = attendance[date]?.[worker.id];
+        const dayRecord = (attendance as any)[date]?.[worker.id];
         if (dayRecord?.present) daysWorked += 1;
         if (dayRecord?.advance) totalAdvancesThisWeek += parseInt(dayRecord.advance || 0, 10);
       });
@@ -375,15 +325,15 @@ export default function App() {
 
   const reportInfo = useMemo(() => {
     if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
-    let reportData = [];
+    let reportData: any[] = [];
     let totalLabor = 0;
     let totalMaterials = 0;
-    Object.entries(attendance).forEach(([dateStr, dayData]) => {
+    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
       const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
       if (isInRange) {
-        Object.entries(dayData || {}).forEach(([workerId, record]) => {
+        Object.entries(dayData || {}).forEach(([workerId, record]: [string, any]) => {
           if (record?.present && record?.site === reportSite) {
-            const worker = workers.find((w) => w.id.toString() === workerId);
+            const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
             if (worker) {
               reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
               totalLabor += worker.dailyWage;
@@ -392,7 +342,7 @@ export default function App() {
         });
       }
     });
-    siteExpenses.forEach((exp) => {
+    siteExpenses.forEach((exp: any) => {
       const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
       if (isInRange && exp.site === reportSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
@@ -402,12 +352,60 @@ export default function App() {
     return { data: reportData, totalLabor, totalMaterials };
   }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
 
+  const exportWeeklyCSV = () => {
+    const utf8BOM = "\uFEFF"; 
+    const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay'];
+    const rows = weeklyData.map(d => [d.name, d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Weekly_Settlement_${currentWeekStart}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportMasterAttendanceCSV = () => {
+    const utf8BOM = "\uFEFF"; 
+    const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)'];
+    const rows: any[] = [];
+    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+      Object.entries(dayData).forEach(([workerId, record]: [string, any]) => {
+        const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+        if (worker) rows.push([dateStr, worker.name, record.site || 'None', record.present ? 'Yes' : 'No', record.advance || 0]);
+      });
+    });
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Attendance_Backup.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportMasterExpensesCSV = () => {
+    const utf8BOM = "\uFEFF"; 
+    const headers = ['Date', 'Site', 'Description', 'Amount (₹)'];
+    const rows = siteExpenses.map((exp: any) => [exp.date, exp.site, exp.description, exp.amount]);
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Expense_Backup.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!isConfigValid) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
-        <div className="bg-white p-8 rounded-xl shadow-lg border border-red-200 text-center max-w-md">
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-red-200 text-center max-w-md text-slate-800">
           <AlertTriangle className="text-red-500 mx-auto mb-4" size={48} />
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Configuration Required</h2>
+          <h2 className="text-xl font-bold mb-2">Configuration Required</h2>
           <p className="text-slate-600 mb-6">Please provide valid Firebase credentials in the <code className="bg-slate-100 px-1 rounded">firebaseConfig</code> object to enable cloud syncing.</p>
           <button onClick={handleViewerLogin} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold">Try Offline Viewer Mode</button>
         </div>
@@ -417,7 +415,7 @@ export default function App() {
 
   if (!role) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 text-slate-800">
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
           <div className="bg-slate-900 p-8 text-center text-white">
             <Building className="text-yellow-400 mx-auto mb-3" size={48} />
@@ -460,8 +458,8 @@ export default function App() {
           <div className="flex items-center gap-2">
             <Building className="text-yellow-400" />
             <h1 className="text-xl font-bold">Contractor Pro</h1>
-            <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px]">{role.toUpperCase()}</span>
-            <span className="text-[10px] text-slate-400 ml-2">{syncStatus}</span>
+            <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role.toUpperCase()}</span>
+            <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider">{syncStatus}</span>
           </div>
           <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full md:w-auto">
             <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}>Daily</button>
@@ -483,7 +481,7 @@ export default function App() {
         {activeTab === 'daily' && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold">Attendance Log</h2>
+              <h2 className="text-lg font-bold flex items-center gap-2"><ClipboardList className="text-blue-600" /> Attendance Log</h2>
               <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border rounded-lg text-sm bg-white" />
             </div>
             <div className="overflow-x-auto">
@@ -494,18 +492,18 @@ export default function App() {
                 <tbody>
                   {workers.length === 0 ? (
                     <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
-                  ) : workers.map((worker) => {
+                  ) : workers.map((worker: any) => {
                     const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
                     return (
                       <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-medium">{worker.name} <span className="text-[10px] text-slate-400 block">₹{worker.dailyWage}/day</span></td>
+                        <td className="p-4 font-medium">{worker.name} <span className="text-[10px] text-slate-400 block font-bold">₹{worker.dailyWage}/DAY</span></td>
                         <td className="p-4 text-center">
                           <input type="checkbox" checked={data.present} onChange={(e) => handleAttendanceChange(worker.id, 'present', e.target.checked)} disabled={role !== 'admin'} className="w-5 h-5 cursor-pointer" />
                         </td>
                         <td className="p-4">
                           <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
                             <option value="">Select Site...</option>
-                            {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                            {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
                           </select>
                         </td>
                         <td className="p-4">
@@ -517,12 +515,29 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+            {role === 'admin' && (
+              <div className="p-6 bg-slate-50 border-t border-slate-200">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Receipt className="text-orange-500" size={16} /> Site Material Expenses ({currentDate})</h3>
+                <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
+                  <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
+                    <option value="">Select Site...</option>
+                    {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                  </select>
+                  <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
+                  <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
+                  <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded transition-colors font-bold shadow-sm">Add</button>
+                </form>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'weekly' && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="p-6 border-b bg-slate-50"><h2 className="text-lg font-bold">Settlement for week of {currentWeekStart}</h2></div>
+            <div className="p-6 border-b bg-slate-50 flex justify-between items-center">
+              <h2 className="text-lg font-bold">Settlement for week of {currentWeekStart}</h2>
+              {role === 'admin' && <button onClick={exportWeeklyCSV} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm"><Download size={14} /> Export CSV</button>}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-100 font-bold text-xs uppercase text-slate-500">
@@ -544,6 +559,21 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'reports' && role === 'admin' && (
+           <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-slate-400">
+             <FileSpreadsheet className="mx-auto mb-4 opacity-20" size={48} />
+             <p className="font-bold uppercase tracking-widest text-xs">Site Reports: {reportInfo.data.length} records processed</p>
+             <p className="text-sm mt-1">Total Labor: ₹{reportInfo.totalLabor} | Total Materials: ₹{reportInfo.totalMaterials}</p>
+           </div>
+        )}
+
+        {activeTab === 'tools' && role === 'admin' && (
+           <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-slate-400">
+             <Wrench className="mx-auto mb-4 opacity-20" size={48} />
+             <p className="font-bold uppercase tracking-widest text-xs">Tool Tracking System</p>
+           </div>
+        )}
+
         {activeTab === 'manage' && role === 'admin' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-xl border shadow-sm">
@@ -551,10 +581,10 @@ export default function App() {
               <form onSubmit={handleAddWorker} className="space-y-2">
                 <input required name="name" placeholder="Full Name" className="w-full p-2 border rounded text-sm" />
                 <input required name="wage" type="number" placeholder="Daily Wage (₹)" className="w-full p-2 border rounded text-sm" />
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold">Add Worker</button>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold shadow-sm flex items-center justify-center gap-2"><Plus size={16} /> Add Worker</button>
               </form>
               <div className="mt-4 space-y-1">
-                {workers.map(w => (
+                {workers.map((w: any) => (
                   <div key={w.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{w.name} (₹{w.dailyWage})</span>
                     <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
@@ -566,13 +596,13 @@ export default function App() {
               <h2 className="font-bold mb-4 flex items-center gap-2"><Building size={20} className="text-blue-600" /> Manage Sites</h2>
               <form onSubmit={handleAddSite} className="flex gap-2">
                 <input required name="site" placeholder="Site Name" className="flex-grow p-2 border rounded text-sm" />
-                <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-4 rounded transition-colors font-bold">Add</button>
+                <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-4 rounded transition-colors font-bold shadow-sm">Add</button>
               </form>
               <div className="mt-4 space-y-1">
                 {sites.map((s, i) => (
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{s}</span>
-                    <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
+                    <button onClick={() => handleDeleteSite(s as string)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
@@ -586,15 +616,19 @@ export default function App() {
             <div className="space-y-4">
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-xs text-blue-800 font-bold uppercase tracking-wider mb-1">Sync Info</p>
-                <p className="text-sm text-blue-700">Database connection: {syncStatus}</p>
+                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Cloud size={14} /> Database: {syncStatus}</p>
               </div>
-              <button onClick={() => setConfirmClear(true)} className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded font-bold transition-colors">Clear All Local & Cloud Data</button>
+              <div className="flex flex-col gap-2">
+                 <button onClick={exportMasterAttendanceCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-3 rounded font-bold transition-colors flex items-center justify-center gap-2 border"><Download size={16} /> Backup Attendance</button>
+                 <button onClick={exportMasterExpensesCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-3 rounded font-bold transition-colors flex items-center justify-center gap-2 border"><Download size={16} /> Backup Expenses</button>
+              </div>
+              <button onClick={() => setConfirmClear(true)} className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded font-bold transition-colors">Clear Data</button>
               {confirmClear && (
                 <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded animate-pulse">
-                  <p className="text-red-700 font-bold mb-2">CRITICAL: This will permanently delete all worker logs. Continue?</p>
+                  <p className="text-red-700 font-bold mb-2 text-sm">CRITICAL: This will permanently delete all worker logs. Continue?</p>
                   <div className="flex gap-2">
-                    <button onClick={handleClearData} className="flex-1 bg-red-600 text-white p-2 rounded font-bold">Yes, Delete</button>
-                    <button onClick={() => setConfirmClear(false)} className="flex-1 bg-slate-200 p-2 rounded font-bold">Cancel</button>
+                    <button onClick={handleClearData} className="flex-1 bg-red-600 text-white p-2 rounded font-bold text-xs uppercase">Yes, Delete</button>
+                    <button onClick={() => setConfirmClear(false)} className="flex-1 bg-slate-200 p-2 rounded font-bold text-xs uppercase">Cancel</button>
                   </div>
                 </div>
               )}
