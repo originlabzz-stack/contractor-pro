@@ -74,7 +74,6 @@ export default function App() {
   const [inventory, setInventory] = useState([]);
   
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportMonth] = useState(new Date().toISOString().slice(0, 7)); // kept for potential future use
   const [confirmClear, setConfirmClear] = useState(false);
   
   const [user, setUser] = useState(null);
@@ -300,8 +299,7 @@ export default function App() {
   };
 
   const currentWeekStart = getStartOfWeek(currentDate);
-  const reportWeekStart = getStartOfWeek(currentDate); // using currentDate for simplicity
-  const reportWeekDates = useMemo(() => getDatesOfWeek(reportWeekStart), [reportWeekStart]);
+  // removed unused reportWeekDates
 
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
@@ -325,7 +323,7 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart]);
 
-  // Simplified report info (removed unused state setters)
+  // Simplified report info (removed unused state setters and variables)
   const reportInfo = useMemo(() => {
     if (!sites.length) return { data: [], totalLabor: 0, totalMaterials: 0 };
     const firstSite = sites[0];
