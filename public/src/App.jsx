@@ -14,13 +14,13 @@ import bcrypt from 'bcryptjs';
 // FIREBASE CONFIGURATION
 // =========================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyAnTV1SNUtXig9J9r2hPmuMeNw9arhdsao",
-  authDomain: "contractor-pro-af4dd.firebaseapp.com",
-  projectId: "contractor-pro-af4dd",
-  storageBucket: "contractor-pro-af4dd.firebasestorage.app",
-  messagingSenderId: "1003509220202",
-  appId: "1:1003509220202:web:f7e9b0785cca64acd85b13",
-  measurementId: "G-0DG8BXZP9S"
+  apiKey:PROCESS.N.REACT_APP_FIREBASE_API_KEY,
+  authDomain: PROCESS.N.REACT_APP_AUTH_DOMAIN,
+  projectId: PROCESS.N.REACT_APP_PROJECT_ID,
+  storageBucket: PROCESS.N.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: PROCESS.N.REACT_APP_MESSAGING_SENDER_ID,
+  appId: PROCESS.N.REACT_APP_APP_ID,
+  measurementId: REACT_APP_APP_ID
 };
 
 // Initialize Firebase
