@@ -35,6 +35,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
+
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -86,6 +87,10 @@ export default function App() {
   // Expense Editing State
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [editExpenseData, setEditExpenseData] = useState({ site: '', desc: '', amount: '' });
+
+  // Calendar State
+  const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [calendarSite, setCalendarSite] = useState('');
 
   const [user, setUser] = useState(null);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
@@ -456,6 +461,43 @@ export default function App() {
     return siteExpenses.filter((exp) => exp.date === currentDate);
   }, [siteExpenses, currentDate]);
 
+  const calendarData = useMemo(() => {
+    if (!calendarSite) return { days: [], blankStartDays: 0 };
+    const [year, month] = calendarMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); // 0 (Sun) to 6 (Sat)
+
+    const days = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      
+      let workerCount = 0;
+      if (attendance[dateStr]) {
+        Object.values(attendance[dateStr]).forEach(record => {
+          if (record.present && record.site === calendarSite) {
+            workerCount++;
+          }
+        });
+      }
+
+      let expenseTotal = 0;
+      siteExpenses.forEach(exp => {
+        if (exp.date === dateStr && exp.site === calendarSite) {
+          expenseTotal += exp.amount;
+        }
+      });
+
+      days.push({
+        dayNum: i,
+        dateStr,
+        workerCount,
+        expenseTotal,
+        isActive: workerCount > 0 || expenseTotal > 0
+      });
+    }
+    return { days, blankStartDays: firstDayOfMonth };
+  }, [calendarMonth, calendarSite, attendance, siteExpenses]);
+
   // --- Exports ---
   const utf8BOM = "\uFEFF"; 
   
@@ -610,7 +652,8 @@ export default function App() {
             <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
           </div>
           <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full md:w-auto">
-            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Daily Log</button>
+            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><ClipboardList size={14}/> Daily Log</button>
+            <button onClick={() => setActiveTab('calendar')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Site Calendar</button>
             <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'weekly' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wallet size={14}/> Settlement</button>
             {role === 'admin' && (
               <>
@@ -724,6 +767,52 @@ export default function App() {
                   </div>
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* SITE CALENDAR TAB */}
+        {activeTab === 'calendar' && (
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+             <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Calendar className="text-blue-600" /> Site Calendar</h2>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <input type="month" value={calendarMonth} onChange={(e) => setCalendarMonth(e.target.value)} className="p-2 border rounded-lg text-sm bg-white" />
+                <select value={calendarSite} onChange={(e) => setCalendarSite(e.target.value)} className="p-2 border rounded-lg text-sm bg-white flex-grow">
+                  <option value="">Select Site...</option>
+                  {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            
+            {!calendarSite ? (
+               <div className="p-16 text-center text-slate-400"><Calendar size={48} className="mx-auto mb-4 opacity-20" /><p className="font-bold">Select a site to view its calendar</p></div>
+            ) : (
+               <div className="p-6">
+                 {/* Days of week header */}
+                 <div className="grid grid-cols-7 gap-2 mb-2 text-center font-bold text-xs uppercase tracking-wider text-slate-500">
+                    <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                 </div>
+                 {/* Calendar Grid */}
+                 <div className="grid grid-cols-7 gap-2">
+                    {Array.from({ length: calendarData.blankStartDays }).map((_, i) => (
+                      <div key={`blank-${i}`} className="p-2 bg-slate-50 rounded-lg opacity-50 border border-transparent min-h-[70px] sm:min-h-[90px]"></div>
+                    ))}
+                    {calendarData.days.map(day => (
+                      <div key={day.dateStr} className={`p-1.5 sm:p-2 rounded-lg border min-h-[70px] sm:min-h-[90px] flex flex-col ${day.isActive ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100'}`}>
+                         <span className={`text-xs font-bold ${day.isActive ? 'text-blue-800' : 'text-slate-400'}`}>{day.dayNum}</span>
+                         {day.isActive ? (
+                           <div className="mt-auto space-y-1">
+                             {day.workerCount > 0 && <span className="block text-[9px] sm:text-[10px] bg-blue-600 text-white px-1 py-0.5 rounded truncate">{day.workerCount} Workers</span>}
+                             {day.expenseTotal > 0 && <span className="block text-[9px] sm:text-[10px] bg-orange-500 text-white px-1 py-0.5 rounded truncate">₹{day.expenseTotal} Mat.</span>}
+                           </div>
+                         ) : (
+                           <span className="mt-auto text-[10px] text-slate-300 hidden sm:block">No Activity</span>
+                         )}
+                      </div>
+                    ))}
+                 </div>
+               </div>
             )}
           </div>
         )}
