@@ -15,12 +15,12 @@ import bcrypt from 'bcryptjs';
 // =========================================================
 const firebaseConfig = {
   apiKey:PROCESS.N.REACT_APP_FIREBASE_API_KEY,
-  authDomain: PROCESS.N.REACT_APP_AUTH_DOMAIN,
-  projectId: PROCESS.N.REACT_APP_PROJECT_ID,
-  storageBucket: PROCESS.N.REACT_APP_STORAGE_BUCKET,
-  messagingSenderId: PROCESS.N.REACT_APP_MESSAGING_SENDER_ID,
-  appId: PROCESS.N.REACT_APP_APP_ID,
-  measurementId: REACT_APP_APP_ID
+  authDomain:PROCESS.N.REACT_APP_AUTH_DOMAIN,
+  projectId:PROCESS.N.REACT_APP_PROJECT_ID,
+  storageBucket:PROCESS.N.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId:PROCESS.N.REACT_APP_MESSAGING_SENDER_ID,
+  appId:PROCESS.N.REACT_APP_APP_ID,
+  measurementId:PROCESS.N.REACT_APP_APP_ID
 };
 
 // Initialize Firebase
