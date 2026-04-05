@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
-  Cloud, RotateCcw, Settings, AlertTriangle, Lock, Eye, LogOut, Wrench 
+  RotateCcw, Settings, Lock, Eye, LogOut, Wrench 
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
