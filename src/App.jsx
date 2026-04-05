@@ -8,7 +8,6 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInAnonymously, 
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
@@ -314,7 +313,7 @@ export default function App() {
 
   const handleClearData = () => {
     setAttendance({});
-    setSiteExpenses({});
+    setSiteExpenses([]);
     setWeeklyOverrides({});
     setConfirmClear(false);
   };
