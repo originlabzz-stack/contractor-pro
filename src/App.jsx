@@ -27,19 +27,19 @@ import {
 // FIREBASE CONFIGURATION
 // =========================================================
 const firebaseConfig = {
-  apiKey:process.env.REACT_APP_FIREBASE_API_KEY ,
-  authDomain:process.env.REACT_APP_AUTH_DOMAIN ,
-  projectId:process.env.REACT_APP_PROJECT_ID ,
-  storageBucket:process.env.REACT_APP_STORAGE_BUCKET ,
-  messagingSenderId:process.env.REACT_APP_MESSAGING_SENDER_ID ,
-  appId:process.env.REACT_APP_APP_ID ,
-  measurementId:process.env.REACT_APP_MEASUREMENT_ID 
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_APP_ID,
+  measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
 
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
-let auth: any, db: any;
+let auth, db;
 const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey.length > 0;
 
 if (isConfigValid) {
@@ -55,7 +55,7 @@ if (isConfigValid) {
 const appId = "contractor_tracker_v1";
 
 export default function App() {
-  const [role, setRole] = useState<string | null>(null); 
+  const [role, setRole] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -69,15 +69,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily');
   const [workers, setWorkers] = useState([]);
   const [sites, setSites] = useState([]);
-  const [attendance, setAttendance] = useState<any>({});
+  const [attendance, setAttendance] = useState({});
   const [siteExpenses, setSiteExpenses] = useState([]);
-  const [weeklyOverrides, setWeeklyOverrides] = useState({}); 
+  const [weeklyOverrides, setWeeklyOverrides] = useState({});
   const [inventory, setInventory] = useState([]);
   
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportMonth] = useState(new Date().toISOString().slice(0, 7)); 
+  const [reportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [reportSite, setReportSite] = useState('');
-  const [reportPeriodType, setReportPeriodType] = useState('monthly'); 
+  const [reportPeriodType, setReportPeriodType] = useState('monthly');
   const [reportWeekDate, setReportWeekDate] = useState(new Date().toISOString().split('T')[0]);
   const [confirmClear, setConfirmClear] = useState(false);
   
@@ -89,7 +89,7 @@ export default function App() {
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      setUser(authUser as any);
+      setUser(authUser);
       if (authUser) {
         try {
           const adminRef = collection(db, 'admins');
@@ -107,7 +107,7 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [auth]); // added auth dependency
 
   // --- Data Fetching ---
   useEffect(() => {
@@ -134,12 +134,12 @@ export default function App() {
 
   // --- Auto-Save logic ---
   useEffect(() => {
-    if (!user || !db || !isCloudSynced || role !== 'admin') return; 
+    if (!user || !db || !isCloudSynced || role !== 'admin') return;
     setSyncStatus('Saving...');
     const saveData = async () => {
       try {
         const docRef = doc(db, 'dashboard_data', appId);
-        await setDoc(docRef, { 
+        await setDoc(docRef, {
           workers, sites, attendance, siteExpenses, weeklyOverrides, inventory,
           lastUpdated: new Date().toISOString()
         });
@@ -149,11 +149,11 @@ export default function App() {
         setSyncStatus('Error');
       }
     };
-    const timeoutId = setTimeout(saveData, 1500); 
+    const timeoutId = setTimeout(saveData, 1500);
     return () => clearTimeout(timeoutId);
   }, [workers, sites, attendance, siteExpenses, weeklyOverrides, inventory, isCloudSynced, user, role]);
-  
-  const handleSecureLogin = async (e: React.FormEvent) => {
+
+  const handleSecureLogin = async (e) => {
     e.preventDefault();
     if (!auth) return;
     setLoginError('');
@@ -178,7 +178,7 @@ export default function App() {
       
       setLoginEmail('');
       setLoginPassword('');
-    } catch (error: any) {
+    } catch (error) {
       console.error("Login error:", error);
       if (error.code === 'auth/user-not-found') {
         setLoginError('Email not found.');
@@ -196,7 +196,7 @@ export default function App() {
     setLoginPassword('');
   };
 
-  const handleAdminSetup = async (e: React.FormEvent) => {
+  const handleAdminSetup = async (e) => {
     e.preventDefault();
     if (!auth) return;
     setSetupError('');
@@ -221,14 +221,14 @@ export default function App() {
       });
 
       setTimeout(() => setShowAdminSetup(false), 2000);
-    } catch (error: any) {
+    } catch (error) {
       setSetupError(error.message);
     }
   };
 
-  const handleAttendanceChange = (workerId: any, field: string, value: any) => {
-    if (role !== 'admin') return; 
-    setAttendance((prev: any) => {
+  const handleAttendanceChange = (workerId, field, value) => {
+    if (role !== 'admin') return;
+    setAttendance((prev) => {
       const dayData = prev[currentDate] || {};
       const workerData = dayData[workerId] || { present: false, site: '', advance: 0 };
       return {
@@ -238,41 +238,46 @@ export default function App() {
     });
   };
 
-  const handleAddWorker = (e: any) => {
+  const handleAddWorker = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const name = formData.get('name') as string;
-    const wage = parseInt(formData.get('wage') as string, 10);
+    const name = formData.get('name');
+    const wage = parseInt(formData.get('wage'), 10);
     if (name && !isNaN(wage)) {
-      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }] as any);
+      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }]);
       e.target.reset();
     }
   };
 
-  const handleAddSite = (e: any) => {
+  const handleAddSite = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site') as string;
+    const site = formData.get('site');
     if (site) {
-      setSites([...sites, site] as any);
+      setSites([...sites, site]);
       e.target.reset();
     }
   };
 
-  const handleAddExpense = (e: any) => {
+  const handleAddExpense = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site') as string;
-    const desc = formData.get('desc') as string;
-    const amount = parseInt(formData.get('amount') as string, 10);
+    const site = formData.get('site');
+    const desc = formData.get('desc');
+    const amount = parseInt(formData.get('amount'), 10);
     if (site && desc && !isNaN(amount)) {
-      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }] as any);
+      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }]);
       e.target.reset();
     }
   };
 
-  const handleDeleteWorker = (id: any) => { if (role === 'admin') setWorkers(workers.filter((w: any) => w.id !== id)); };
-  const handleDeleteSite = (site: string) => { if (role === 'admin') setSites(sites.filter((s: any) => s !== site)); };
+  const handleDeleteWorker = (id) => {
+    if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id));
+  };
+
+  const handleDeleteSite = (site) => {
+    if (role === 'admin') setSites(sites.filter((s) => s !== site));
+  };
 
   const handleClearData = () => {
     setAttendance({});
@@ -280,14 +285,14 @@ export default function App() {
     setConfirmClear(false);
   };
 
-  const getStartOfWeek = (dateString: string) => {
+  const getStartOfWeek = (dateString) => {
     const date = new Date(dateString);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(date.setDate(diff)).toISOString().split('T')[0];
   };
 
-  const getDatesOfWeek = (startDate: string) => {
+  const getDatesOfWeek = (startDate) => {
     const dates = [];
     let start = new Date(startDate);
     for (let i = 0; i < 7; i++) {
@@ -303,11 +308,11 @@ export default function App() {
 
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
-    return workers.map((worker: any) => {
+    return workers.map((worker) => {
       let daysWorked = 0;
       let totalAdvancesThisWeek = 0;
       weekDates.forEach(date => {
-        const dayRecord = (attendance as any)[date]?.[worker.id];
+        const dayRecord = attendance[date]?.[worker.id];
         if (dayRecord?.present) daysWorked += 1;
         if (dayRecord?.advance) totalAdvancesThisWeek += parseInt(dayRecord.advance || 0, 10);
       });
@@ -325,15 +330,15 @@ export default function App() {
 
   const reportInfo = useMemo(() => {
     if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
-    let reportData: any[] = [];
+    let reportData = [];
     let totalLabor = 0;
     let totalMaterials = 0;
-    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+    Object.entries(attendance).forEach(([dateStr, dayData]) => {
       const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
       if (isInRange) {
-        Object.entries(dayData || {}).forEach(([workerId, record]: [string, any]) => {
+        Object.entries(dayData || {}).forEach(([workerId, record]) => {
           if (record?.present && record?.site === reportSite) {
-            const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+            const worker = workers.find((w) => w.id.toString() === workerId);
             if (worker) {
               reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
               totalLabor += worker.dailyWage;
@@ -342,7 +347,7 @@ export default function App() {
         });
       }
     });
-    siteExpenses.forEach((exp: any) => {
+    siteExpenses.forEach((exp) => {
       const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
       if (isInRange && exp.site === reportSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
@@ -353,7 +358,7 @@ export default function App() {
   }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
 
   const exportWeeklyCSV = () => {
-    const utf8BOM = "\uFEFF"; 
+    const utf8BOM = "\uFEFF";
     const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay'];
     const rows = weeklyData.map(d => [d.name, d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -367,12 +372,12 @@ export default function App() {
   };
 
   const exportMasterAttendanceCSV = () => {
-    const utf8BOM = "\uFEFF"; 
+    const utf8BOM = "\uFEFF";
     const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)'];
-    const rows: any[] = [];
-    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
-      Object.entries(dayData).forEach(([workerId, record]: [string, any]) => {
-        const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+    const rows = [];
+    Object.entries(attendance).forEach(([dateStr, dayData]) => {
+      Object.entries(dayData).forEach(([workerId, record]) => {
+        const worker = workers.find((w) => w.id.toString() === workerId);
         if (worker) rows.push([dateStr, worker.name, record.site || 'None', record.present ? 'Yes' : 'No', record.advance || 0]);
       });
     });
@@ -387,9 +392,9 @@ export default function App() {
   };
 
   const exportMasterExpensesCSV = () => {
-    const utf8BOM = "\uFEFF"; 
+    const utf8BOM = "\uFEFF";
     const headers = ['Date', 'Site', 'Description', 'Amount (₹)'];
-    const rows = siteExpenses.map((exp: any) => [exp.date, exp.site, exp.description, exp.amount]);
+    const rows = siteExpenses.map((exp) => [exp.date, exp.site, exp.description, exp.amount]);
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -492,7 +497,7 @@ export default function App() {
                 <tbody>
                   {workers.length === 0 ? (
                     <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
-                  ) : workers.map((worker: any) => {
+                  ) : workers.map((worker) => {
                     const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
                     return (
                       <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
@@ -503,7 +508,7 @@ export default function App() {
                         <td className="p-4">
                           <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
                             <option value="">Select Site...</option>
-                            {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                            {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
                           </select>
                         </td>
                         <td className="p-4">
@@ -521,7 +526,7 @@ export default function App() {
                 <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
                   <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
                     <option value="">Select Site...</option>
-                    {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                    {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
                   </select>
                   <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
                   <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
@@ -584,7 +589,7 @@ export default function App() {
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold shadow-sm flex items-center justify-center gap-2"><Plus size={16} /> Add Worker</button>
               </form>
               <div className="mt-4 space-y-1">
-                {workers.map((w: any) => (
+                {workers.map((w) => (
                   <div key={w.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{w.name} (₹{w.dailyWage})</span>
                     <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
@@ -602,7 +607,7 @@ export default function App() {
                 {sites.map((s, i) => (
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{s}</span>
-                    <button onClick={() => handleDeleteSite(s as string)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
+                    <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
