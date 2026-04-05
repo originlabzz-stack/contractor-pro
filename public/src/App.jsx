@@ -14,15 +14,18 @@ import bcrypt from 'bcryptjs';
 // FIREBASE CONFIGURATION
 // =========================================================
 const firebaseConfig = {
-  apiKey: "PASTE_API_KEY_HERE",
-  authDomain: "PASTE_AUTH_DOMAIN_HERE",
-  projectId: "PASTE_PROJECT_ID_HERE",
-  storageBucket: "PASTE_STORAGE_BUCKET_HERE",
-  messagingSenderId: "PASTE_MESSAGING_SENDER_ID_HERE",
-  appId: "PASTE_APP_ID_HERE",
-  measurementId: "PASTE_MEASUREMENT_ID_HERE"
+  apiKey: "AIzaSyAnTV1SNUtXig9J9r2hPmuMeNw9arhdsao",
+  authDomain: "contractor-pro-af4dd.firebaseapp.com",
+  projectId: "contractor-pro-af4dd",
+  storageBucket: "contractor-pro-af4dd.firebasestorage.app",
+  messagingSenderId: "1003509220202",
+  appId: "1:1003509220202:web:f7e9b0785cca64acd85b13",
+  measurementId: "G-0DG8BXZP9S"
 };
 
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 let app, auth, db;
 const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("PASTE_");
 
