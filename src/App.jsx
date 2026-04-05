@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Building, ClipboardList, 
+  Users, Building, ClipboardList, Calendar, Wallet,
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
   Cloud, Settings, LogOut, Wrench, AlertTriangle 
 } from 'lucide-react';
@@ -74,6 +74,13 @@ export default function App() {
   const [inventory, setInventory] = useState([]);
   
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // --- Restored report filter states ---
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [reportSite, setReportSite] = useState('');
+  const [reportPeriodType, setReportPeriodType] = useState('monthly');
+  const [reportWeekDate, setReportWeekDate] = useState(new Date().toISOString().split('T')[0]);
+  
   const [confirmClear, setConfirmClear] = useState(false);
   
   const [user, setUser] = useState(null);
@@ -102,8 +109,7 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // auth is stable, no need to include
+  }, []);
 
   // --- Data Fetching ---
   useEffect(() => {
@@ -299,7 +305,8 @@ export default function App() {
   };
 
   const currentWeekStart = getStartOfWeek(currentDate);
-  // removed unused reportWeekDates
+  const reportWeekStart = getStartOfWeek(reportWeekDate);
+  const reportWeekDates = useMemo(() => getDatesOfWeek(reportWeekStart), [reportWeekStart]);
 
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
@@ -323,32 +330,41 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart]);
 
-  // Simplified report info (removed unused state setters and variables)
+  // --- Restored full report logic ---
   const reportInfo = useMemo(() => {
-    if (!sites.length) return { data: [], totalLabor: 0, totalMaterials: 0 };
-    const firstSite = sites[0];
+    if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
     let reportData = [];
     let totalLabor = 0;
     let totalMaterials = 0;
     Object.entries(attendance).forEach(([dateStr, dayData]) => {
-      Object.entries(dayData || {}).forEach(([workerId, record]) => {
-        if (record?.present && record?.site === firstSite) {
-          const worker = workers.find((w) => w.id.toString() === workerId);
-          if (worker) {
-            reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
-            totalLabor += worker.dailyWage;
+      const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
+      if (isInRange) {
+        Object.entries(dayData || {}).forEach(([workerId, record]) => {
+          if (record?.present && record?.site === reportSite) {
+            const worker = workers.find((w) => w.id.toString() === workerId);
+            if (worker) {
+              reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
+              totalLabor += worker.dailyWage;
+            }
           }
-        }
-      });
+        });
+      }
     });
     siteExpenses.forEach((exp) => {
-      if (exp.site === firstSite) {
+      const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
+      if (isInRange && exp.site === reportSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
         totalMaterials += exp.amount;
       }
     });
     return { data: reportData, totalLabor, totalMaterials };
-  }, [attendance, siteExpenses, workers, sites]);
+  }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
+
+  // --- Expense summary for Wallet widget ---
+  const totalExpensesThisMonth = useMemo(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return siteExpenses.filter(exp => exp.date.startsWith(currentMonth)).reduce((sum, exp) => sum + exp.amount, 0);
+  }, [siteExpenses]);
 
   const exportWeeklyCSV = () => {
     const utf8BOM = "\uFEFF";
@@ -477,56 +493,71 @@ export default function App() {
 
       <main className="max-w-6xl mx-auto p-6 space-y-6">
         {activeTab === 'daily' && (
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold flex items-center gap-2"><ClipboardList className="text-blue-600" /> Attendance Log</h2>
-              <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border rounded-lg text-sm bg-white" />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
-                  <tr><th className="p-4">Worker</th><th className="p-4 text-center">Present</th><th className="p-4">Site</th><th className="p-4">Advance</th></tr>
-                </thead>
-                <tbody>
-                  {workers.length === 0 ? (
-                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
-                  ) : workers.map((worker) => {
-                    const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
-                    return (
-                      <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-medium">{worker.name} <span className="text-[10px] text-slate-400 block font-bold">₹{worker.dailyWage}/DAY</span></td>
-                        <td className="p-4 text-center">
-                          <input type="checkbox" checked={data.present} onChange={(e) => handleAttendanceChange(worker.id, 'present', e.target.checked)} disabled={role !== 'admin'} className="w-5 h-5 cursor-pointer" />
-                        </td>
-                        <td className="p-4">
-                          <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
-                            <option value="">Select Site...</option>
-                            {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                          </select>
-                        </td>
-                        <td className="p-4">
-                          <input type="number" value={data.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 border rounded text-sm bg-white" placeholder="₹ 0" />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {role === 'admin' && (
-              <div className="p-6 bg-slate-50 border-t border-slate-200">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Receipt className="text-orange-500" size={16} /> Site Material Expenses ({currentDate})</h3>
-                <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
-                  <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
-                    <option value="">Select Site...</option>
-                    {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </select>
-                  <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
-                  <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
-                  <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded transition-colors font-bold shadow-sm">Add</button>
-                </form>
+          <div className="space-y-6">
+            {/* Wallet widget - shows current month expenses */}
+            <div className="bg-white rounded-xl shadow-sm border p-4 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Wallet className="text-green-600" size={24} />
+                <div>
+                  <p className="text-xs text-slate-500">Total Expenses This Month</p>
+                  <p className="text-2xl font-bold text-green-600">₹{totalExpensesThisMonth}</p>
+                </div>
               </div>
-            )}
+              <Calendar className="text-slate-400" size={20} />
+            </div>
+
+            {/* Attendance table - same as before */}
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                <h2 className="text-lg font-bold flex items-center gap-2"><ClipboardList className="text-blue-600" /> Attendance Log</h2>
+                <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border rounded-lg text-sm bg-white" />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
+                    <tr><th className="p-4">Worker</th><th className="p-4 text-center">Present</th><th className="p-4">Site</th><th className="p-4">Advance</th></tr>
+                  </thead>
+                  <tbody>
+                    {workers.length === 0 ? (
+                      <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
+                    ) : workers.map((worker) => {
+                      const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
+                      return (
+                        <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
+                          <td className="p-4 font-medium">{worker.name} <span className="text-[10px] text-slate-400 block font-bold">₹{worker.dailyWage}/DAY</span></td>
+                          <td className="p-4 text-center">
+                            <input type="checkbox" checked={data.present} onChange={(e) => handleAttendanceChange(worker.id, 'present', e.target.checked)} disabled={role !== 'admin'} className="w-5 h-5 cursor-pointer" />
+                          </td>
+                          <td className="p-4">
+                            <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
+                              <option value="">Select Site...</option>
+                              {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-4">
+                            <input type="number" value={data.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 border rounded text-sm bg-white" placeholder="₹ 0" />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {role === 'admin' && (
+                <div className="p-6 bg-slate-50 border-t border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Receipt className="text-orange-500" size={16} /> Site Material Expenses ({currentDate})</h3>
+                  <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
+                    <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
+                      <option value="">Select Site...</option>
+                      {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                    </select>
+                    <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
+                    <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
+                    <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded transition-colors font-bold shadow-sm">Add</button>
+                  </form>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -558,18 +589,70 @@ export default function App() {
         )}
 
         {activeTab === 'reports' && role === 'admin' && (
-           <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-slate-400">
-             <FileSpreadsheet className="mx-auto mb-4 opacity-20" size={48} />
-             <p className="font-bold uppercase tracking-widest text-xs">Site Reports: {reportInfo.data.length} records processed</p>
-             <p className="text-sm mt-1">Total Labor: ₹{reportInfo.totalLabor} | Total Materials: ₹{reportInfo.totalMaterials}</p>
-           </div>
+          <div className="bg-white rounded-xl shadow-sm border p-6 space-y-6">
+            <h2 className="text-lg font-bold flex items-center gap-2"><FileSpreadsheet className="text-blue-600" /> Site Reports</h2>
+            
+            {/* Filter controls */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="p-2 border rounded text-sm">
+                <option value="">Select Site</option>
+                {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
+              </select>
+              
+              <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="p-2 border rounded text-sm">
+                <option value="monthly">Monthly</option>
+                <option value="weekly">Weekly</option>
+              </select>
+              
+              {reportPeriodType === 'monthly' ? (
+                <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="p-2 border rounded text-sm" />
+              ) : (
+                <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="p-2 border rounded text-sm" />
+              )}
+              
+              <button onClick={() => {}} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold">Refresh</button>
+            </div>
+            
+            {/* Report summary */}
+            {reportSite && (
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <p className="text-sm font-bold">Total Labor: ₹{reportInfo.totalLabor}</p>
+                <p className="text-sm font-bold">Total Materials: ₹{reportInfo.totalMaterials}</p>
+                <p className="text-sm font-bold">Grand Total: ₹{reportInfo.totalLabor + reportInfo.totalMaterials}</p>
+              </div>
+            )}
+            
+            {/* Report table */}
+            {reportInfo.data.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-100">
+                    <tr><th className="p-2">Date</th><th>Type</th><th>Description</th><th className="text-right">Amount</th></tr>
+                  </thead>
+                  <tbody>
+                    {reportInfo.data.map((item, idx) => (
+                      <tr key={idx} className="border-b">
+                        <td className="p-2">{item.date}</td>
+                        <td>{item.type}</td>
+                        <td>{item.desc}</td>
+                        <td className="text-right">₹{item.amount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-slate-400 py-8">No data for selected site and period.</p>
+            )}
+          </div>
         )}
 
         {activeTab === 'tools' && role === 'admin' && (
-           <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-slate-400">
-             <Wrench className="mx-auto mb-4 opacity-20" size={48} />
-             <p className="font-bold uppercase tracking-widest text-xs">Tool Tracking System</p>
-           </div>
+          <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-slate-400">
+            <Wrench className="mx-auto mb-4 opacity-20" size={48} />
+            <p className="font-bold uppercase tracking-widest text-xs">Tool Tracking System</p>
+            <p className="text-sm mt-2">Coming soon: Manage tools and equipment</p>
+          </div>
         )}
 
         {activeTab === 'manage' && role === 'admin' && (
