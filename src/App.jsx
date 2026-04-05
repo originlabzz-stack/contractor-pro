@@ -12,24 +12,24 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 // FIREBASE CONFIGURATION (Fill in when ready)
 // =========================================================
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_APP_ID,
-  measurementId: process.env.REACT_APP_MEASUREMENT_ID
+  apiKey: "PASTE_API_KEY_HERE",
+  authDomain: "PASTE_AUTH_DOMAIN_HERE",
+  projectId: "PASTE_PROJECT_ID_HERE",
+  storageBucket: "PASTE_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_MESSAGING_SENDER_ID_HERE",
+  appId: "PASTE_APP_ID_HERE",
+  measurementId: "PASTE_MEASUREMENT_ID_HERE"
 };
 // =========================================================
 
-let app, auth, db;
+let auth, db;
 const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("PASTE_");
 
 if (isConfigValid) {
   try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
+    initializeApp(firebaseConfig); // app instance not needed separately
+    auth = getAuth();
+    db = getFirestore();
   } catch (e) {
     console.error("Firebase Initialization Error:", e);
   }
@@ -153,7 +153,7 @@ export default function App() {
     const csv = data.map(row => 
       Object.values(row).map(val => escapeCSV(val)).join(',')
     ).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -356,8 +356,8 @@ export default function App() {
     const rows = weeklyData.map(d => [d.name, d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
     const csvContent = [headers, ...rows].map(row => row.map(cell => escapeCSV(cell)).join(',')).join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', `Weekly_Settlement_${currentWeekStart}.csv`);
     document.body.appendChild(link);
