@@ -3,7 +3,7 @@ import {
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
   Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
-  RotateCcw, Edit2, X, Database 
+  RotateCcw, Edit2, X, Database, Save
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -35,7 +35,6 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
-
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -84,6 +83,10 @@ export default function App() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [exportYear, setExportYear] = useState('All');
   
+  // Expense Editing State
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [editExpenseData, setEditExpenseData] = useState({ site: '', desc: '', amount: '' });
+
   const [user, setUser] = useState(null);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState(isConfigValid ? 'Connecting...' : 'Offline Mode');
@@ -267,6 +270,29 @@ export default function App() {
     }
   };
 
+  const handleDeleteExpense = (id) => {
+    if (role === 'admin') setSiteExpenses(siteExpenses.filter((e) => e.id !== id));
+  };
+
+  const startEditingExpense = (expense) => {
+    setEditingExpenseId(expense.id);
+    setEditExpenseData({ site: expense.site, desc: expense.description, amount: expense.amount });
+  };
+
+  const saveEditedExpense = () => {
+    if (!editExpenseData.site || !editExpenseData.desc || isNaN(editExpenseData.amount)) return;
+    setSiteExpenses(siteExpenses.map(exp => 
+      exp.id === editingExpenseId 
+      ? { ...exp, site: editExpenseData.site, description: editExpenseData.desc, amount: parseInt(editExpenseData.amount, 10) }
+      : exp
+    ));
+    setEditingExpenseId(null);
+  };
+
+  const cancelEditingExpense = () => {
+    setEditingExpenseId(null);
+  };
+
   const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
   const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
 
@@ -425,6 +451,10 @@ export default function App() {
     siteExpenses.forEach((exp) => exp.date && years.add(exp.date.substring(0, 4)));
     return Array.from(years).sort((a, b) => b.localeCompare(a));
   }, [attendance, siteExpenses]);
+
+  const todaysExpenses = useMemo(() => {
+    return siteExpenses.filter((exp) => exp.date === currentDate);
+  }, [siteExpenses, currentDate]);
 
   // --- Exports ---
   const utf8BOM = "\uFEFF"; 
@@ -647,6 +677,52 @@ export default function App() {
                   <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
                   <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded transition-colors font-bold shadow-sm">Add</button>
                 </form>
+
+                {todaysExpenses.length > 0 && (
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead className="bg-slate-200 text-slate-600 text-[10px] uppercase tracking-wider">
+                        <tr><th className="p-3 border-b">Site</th><th className="p-3 border-b">Description</th><th className="p-3 border-b text-right">Amount</th><th className="p-3 border-b text-center">Action</th></tr>
+                      </thead>
+                      <tbody>
+                        {todaysExpenses.map(exp => (
+                          <tr key={exp.id} className="border-b hover:bg-slate-100 bg-white">
+                            {editingExpenseId === exp.id ? (
+                              <>
+                                <td className="p-2">
+                                  <select value={editExpenseData.site} onChange={(e) => setEditExpenseData({...editExpenseData, site: e.target.value})} className="w-full p-1 border rounded text-sm bg-white">
+                                    <option value="">Select...</option>
+                                    {sites.map((s,i)=><option key={i} value={s}>{s}</option>)}
+                                  </select>
+                                </td>
+                                <td className="p-2">
+                                  <input value={editExpenseData.desc} onChange={(e) => setEditExpenseData({...editExpenseData, desc: e.target.value})} className="w-full p-1 border rounded text-sm"/>
+                                </td>
+                                <td className="p-2">
+                                  <input type="number" value={editExpenseData.amount} onChange={(e) => setEditExpenseData({...editExpenseData, amount: e.target.value})} className="w-full p-1 border rounded text-sm text-right"/>
+                                </td>
+                                <td className="p-2 text-center flex justify-center gap-2">
+                                  <button onClick={saveEditedExpense} className="text-green-600 hover:text-green-800"><Save size={16}/></button>
+                                  <button onClick={cancelEditingExpense} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="p-3 font-medium">{exp.site}</td>
+                                <td className="p-3">{exp.description}</td>
+                                <td className="p-3 text-right font-bold">₹{exp.amount}</td>
+                                <td className="p-3 text-center flex justify-center gap-3">
+                                  <button onClick={() => startEditingExpense(exp)} className="text-blue-500 hover:text-blue-700"><Edit2 size={16}/></button>
+                                  <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
