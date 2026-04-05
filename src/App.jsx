@@ -2,34 +2,52 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
-  RotateCcw, Settings, Lock, Eye, LogOut, Wrench 
+  Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
+  RotateCcw, Edit2, X, Database 
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  collection, 
+  getDocs, 
+  query, 
+  where 
+} from 'firebase/firestore';
 
 // =========================================================
-// FIREBASE CONFIGURATION (Fill in when ready)
+// FIREBASE CONFIGURATION (Fill in the blanks when ready)
 // =========================================================
 const firebaseConfig = {
-  apiKey: "PASTE_API_KEY_HERE",
-  authDomain: "PASTE_AUTH_DOMAIN_HERE",
-  projectId: "PASTE_PROJECT_ID_HERE",
-  storageBucket: "PASTE_STORAGE_BUCKET_HERE",
-  messagingSenderId: "PASTE_MESSAGING_SENDER_ID_HERE",
-  appId: "PASTE_APP_ID_HERE",
-  measurementId: "PASTE_MEASUREMENT_ID_HERE"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_APP_ID,
+  measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
-// =========================================================
 
-let auth, db;
-const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("PASTE_");
+// =========================================================
+// FIREBASE INITIALIZATION
+// =========================================================
+let auth: any, db: any;
+const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey.length > 0;
 
 if (isConfigValid) {
   try {
-    initializeApp(firebaseConfig); // app instance not needed separately
-    auth = getAuth();
-    db = getFirestore();
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
   } catch (e) {
     console.error("Firebase Initialization Error:", e);
   }
@@ -38,47 +56,64 @@ if (isConfigValid) {
 const appId = "contractor_tracker_v1";
 
 export default function App() {
-  const [role, setRole] = useState(null);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
-  const ADMIN_PIN = 'Suresh@12057283';
+  const [role, setRole] = useState<string | null>(null); 
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  
+  const [showAdminSetup, setShowAdminSetup] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
+  const [setupError, setSetupError] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily');
   const [workers, setWorkers] = useState([]);
   const [sites, setSites] = useState([]);
-  const [attendance, setAttendance] = useState({});
+  const [attendance, setAttendance] = useState<any>({});
   const [siteExpenses, setSiteExpenses] = useState([]);
-  const [weeklyOverrides, setWeeklyOverrides] = useState({});
+  const [weeklyOverrides, setWeeklyOverrides] = useState<any>({}); 
   const [inventory, setInventory] = useState([]);
   
+  // UI States
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7)); 
   const [reportSite, setReportSite] = useState('');
-  const [reportPeriodType, setReportPeriodType] = useState('monthly');
+  const [reportPeriodType, setReportPeriodType] = useState('monthly'); 
   const [reportWeekDate, setReportWeekDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isEditingSettlement, setIsEditingSettlement] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [exportYear, setExportYear] = useState('All');
   
   const [user, setUser] = useState(null);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState(isConfigValid ? 'Connecting...' : 'Offline Mode');
 
-  // --- Firebase Auth (anonymous) ---
+  // --- Auth logic ---
   useEffect(() => {
     if (!auth) return;
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Auth error", err);
-        setSyncStatus('Auth Error');
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      setUser(authUser as any);
+      if (authUser) {
+        try {
+          const adminRef = collection(db, 'admins');
+          const adminQuery = query(adminRef, where('uid', '==', authUser.uid));
+          const adminSnap = await getDocs(adminQuery);
+          if (adminSnap.size > 0) {
+            setRole('admin');
+          } else {
+            setRole('viewer');
+          }
+        } catch (e) {
+          console.error("Auth check error:", e);
+          setRole('viewer');
+        }
       }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    });
     return () => unsubscribe();
   }, []);
 
-  // --- Data Fetching from Firestore ---
+  // --- Data Fetching ---
   useEffect(() => {
     if (!user || !db) return;
     const docRef = doc(db, 'dashboard_data', appId);
@@ -101,14 +136,14 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  // --- Auto-Save to Firestore ---
+  // --- Auto-Save logic ---
   useEffect(() => {
-    if (!user || !db || !isCloudSynced || role !== 'admin') return;
+    if (!user || !db || !isCloudSynced || role !== 'admin') return; 
     setSyncStatus('Saving...');
     const saveData = async () => {
       try {
         const docRef = doc(db, 'dashboard_data', appId);
-        await setDoc(docRef, {
+        await setDoc(docRef, { 
           workers, sites, attendance, siteExpenses, weeklyOverrides, inventory,
           lastUpdated: new Date().toISOString()
         });
@@ -118,72 +153,79 @@ export default function App() {
         setSyncStatus('Error');
       }
     };
-    const timeoutId = setTimeout(saveData, 1500);
+    const timeoutId = setTimeout(saveData, 1500); 
     return () => clearTimeout(timeoutId);
   }, [workers, sites, attendance, siteExpenses, weeklyOverrides, inventory, isCloudSynced, user, role]);
+  
+  const handleSecureLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    setLoginError('');
 
-  // --- Helper functions ---
-  const getStartOfWeek = (dateString) => {
-    const date = new Date(dateString);
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff)).toISOString().split('T')[0];
-  };
-
-  const getDatesOfWeek = (startDate) => {
-    const dates = [];
-    let start = new Date(startDate);
-    for (let i = 0; i < 7; i++) {
-      dates.push(new Date(start).toISOString().split('T')[0]);
-      start.setDate(start.getDate() + 1);
-    }
-    return dates;
-  };
-
-  const escapeCSV = (str) => {
-    if (str == null) return '';
-    const stringValue = String(str);
-    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  };
-
-  const generateCSV = (data, filename) => {
-    const csv = data.map(row => 
-      Object.values(row).map(val => escapeCSV(val)).join(',')
-    ).join('\n');
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // --- Event handlers ---
-  const handleLogin = (e, selectedRole) => {
-    if (e) e.preventDefault();
-    if (selectedRole === 'viewer') {
-      setRole('viewer');
-    } else if (selectedRole === 'admin') {
-      if (pinInput === ADMIN_PIN) {
-        setRole('admin');
-        setPinInput('');
-        setPinError('');
-      } else {
-        setPinError('Incorrect password');
-        setPinInput('');
+    try {
+      if (!loginEmail.trim() || !loginPassword) {
+        setLoginError('Please enter both email and password');
+        return;
       }
+
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const adminRef = collection(db, 'admins');
+      const adminQuery = query(adminRef, where('uid', '==', userCredential.user.uid));
+      const adminSnap = await getDocs(adminQuery);
+      
+      if (adminSnap.size > 0) {
+        setRole('admin');
+      } else {
+        setRole('viewer');
+      }
+      
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (error: any) {
+      console.error("Login error:", error);
+      setLoginError('Incorrect credentials or account not found.');
     }
   };
 
-  const handleAttendanceChange = (workerId, field, value) => {
-    if (role !== 'admin') return;
-    setAttendance((prev) => {
+  const handleViewerLogin = () => {
+    setRole('viewer');
+    setLoginEmail('');
+    setLoginPassword('');
+  };
+
+  const handleAdminSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth) return;
+    setSetupError('');
+
+    try {
+      if (!adminEmail.trim() || !adminPassword || !adminPasswordConfirm) {
+        setSetupError('Please fill in all fields');
+        return;
+      }
+      if (adminPassword !== adminPasswordConfirm) {
+        setSetupError('Passwords do not match');
+        return;
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
+      const adminDocRef = doc(collection(db, 'admins'), userCredential.user.uid);
+      await setDoc(adminDocRef, {
+        uid: userCredential.user.uid,
+        email: adminEmail,
+        createdAt: new Date().toISOString(),
+        isAdmin: true
+      });
+
+      setTimeout(() => setShowAdminSetup(false), 2000);
+    } catch (error: any) {
+      setSetupError(error.message);
+    }
+  };
+
+  const handleAttendanceChange = (workerId: any, field: string, value: any) => {
+    if (role !== 'admin') return; 
+    setAttendance((prev: any) => {
       const dayData = prev[currentDate] || {};
       const workerData = dayData[workerId] || { present: false, site: '', advance: 0 };
       return {
@@ -193,90 +235,81 @@ export default function App() {
     });
   };
 
-  const handleAddWorker = (e) => {
+  const handleAddWorker = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const name = formData.get('name');
-    const wage = parseInt(formData.get('wage'), 10);
-    if (name && !isNaN(wage) && wage > 0) {
-      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }]);
+    const name = formData.get('name') as string;
+    const wage = parseInt(formData.get('wage') as string, 10);
+    if (name && !isNaN(wage)) {
+      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }] as any);
       e.target.reset();
     }
   };
 
-  const handleAddSite = (e) => {
+  const handleAddSite = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site');
-    if (site && site.trim()) {
-      setSites([...sites, site]);
+    const site = formData.get('site') as string;
+    if (site && !sites.includes(site as never)) {
+      setSites([...sites, site] as any);
       e.target.reset();
     }
   };
 
-  const handleAddExpense = (e) => {
+  const handleAddExpense = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const site = formData.get('site');
-    const desc = formData.get('desc');
-    const amount = parseInt(formData.get('amount'), 10);
-    if (site && desc && !isNaN(amount) && amount > 0) {
-      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }]);
+    const site = formData.get('site') as string;
+    const desc = formData.get('desc') as string;
+    const amount = parseInt(formData.get('amount') as string, 10);
+    if (site && desc && !isNaN(amount)) {
+      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }] as any);
       e.target.reset();
     }
   };
 
-  const handleDeleteWorker = (id) => {
-    if (role !== 'admin') return;
-    setWorkers(workers.filter((w) => w.id !== id));
-  };
+  const handleDeleteWorker = (id: any) => { if (role === 'admin') setWorkers(workers.filter((w: any) => w.id !== id)); };
+  const handleDeleteSite = (site: string) => { if (role === 'admin') setSites(sites.filter((s: any) => s !== site)); };
 
-  const handleDeleteSite = (siteToDelete) => {
-    if (role !== 'admin') return;
-    setSites(sites.filter((s) => s !== siteToDelete));
-  };
-
-  const handleDeleteExpense = (id) => {
-    if (role !== 'admin') return;
-    setSiteExpenses(siteExpenses.filter((e) => e.id !== id));
-  };
-
-  const handleAddTool = (e) => {
+  const handleAddTool = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const toolName = formData.get('toolName');
-    if (toolName && toolName.trim()) {
-      setInventory([...inventory, { id: Date.now(), name: toolName, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }]);
+    const name = formData.get('name') as string;
+    if (name) {
+      setInventory([...inventory, { id: Date.now(), name, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }] as any);
       e.target.reset();
     }
   };
 
-  const handleAssignTool = (e) => {
+  const handleAssignTool = (e: any) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const toolId = parseInt(formData.get('toolId'), 10);
-    const workerId = formData.get('workerId');
-    const site = formData.get('site');
+    const toolId = parseInt(formData.get('toolId') as string, 10);
+    const workerId = formData.get('workerId') as string;
+    const site = formData.get('site') as string;
     if (toolId && workerId && site) {
-      const worker = workers.find((w) => w.id.toString() === workerId);
-      if (worker) {
-        setInventory(inventory.map((tool) => 
-          tool.id === toolId 
-          ? { ...tool, status: 'Assigned', assignedWorker: worker.name, assignedSite: site, checkoutDate: currentDate } 
-          : tool
-        ));
-        e.target.reset();
-      }
+      const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+      setInventory(inventory.map((tool: any) => 
+        tool.id === toolId 
+        ? { ...tool, status: 'Assigned', assignedWorker: worker?.name || 'Unknown', assignedSite: site, checkoutDate: currentDate } 
+        : tool
+      ) as any);
+      e.target.reset();
     }
   };
 
-  const handleReturnTool = (toolId) => {
+  const handleReturnTool = (toolId: any) => {
     if (role !== 'admin') return;
-    setInventory(inventory.map((tool) => 
+    setInventory(inventory.map((tool: any) => 
       tool.id === toolId 
       ? { ...tool, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' } 
       : tool
-    ));
+    ) as any);
+  };
+
+  const handleDeleteTool = (toolId: any) => {
+    if (role !== 'admin') return;
+    setInventory(inventory.filter((t: any) => t.id !== toolId));
   };
 
   const handleClearData = () => {
@@ -286,47 +319,88 @@ export default function App() {
     setConfirmClear(false);
   };
 
-  // --- Computed data for weekly settlement ---
+  const getStartOfWeek = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff)).toISOString().split('T')[0];
+  };
+
+  const getDatesOfWeek = (startDate: string) => {
+    const dates = [];
+    let start = new Date(startDate);
+    for (let i = 0; i < 7; i++) {
+      dates.push(new Date(start).toISOString().split('T')[0]);
+      start.setDate(start.getDate() + 1);
+    }
+    return dates;
+  };
+
   const currentWeekStart = getStartOfWeek(currentDate);
   const reportWeekStart = getStartOfWeek(reportWeekDate);
   const reportWeekDates = useMemo(() => getDatesOfWeek(reportWeekStart), [reportWeekStart]);
 
+  // --- Calculations ---
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
     const weekOverrides = weeklyOverrides[currentWeekStart] || {};
-    return workers.map((worker) => {
+    return workers.map((worker: any) => {
       let daysWorked = 0;
       let totalAdvancesThisWeek = 0;
       weekDates.forEach(date => {
-        const dayRecord = attendance[date]?.[worker.id];
+        const dayRecord = (attendance as any)[date]?.[worker.id];
         if (dayRecord?.present) daysWorked += 1;
         if (dayRecord?.advance) totalAdvancesThisWeek += parseInt(dayRecord.advance || 0, 10);
       });
       const totalEarned = daysWorked * worker.dailyWage;
       const totalAdvances = totalAdvancesThisWeek + (worker.loanBalance || 0);
       const calcFinalPayout = Math.max(0, totalEarned - totalAdvances);
+      
       const override = weekOverrides[worker.id];
       return {
         ...worker,
         daysWorked,
         totalEarned,
         totalAdvances,
-        finalPayout: override && override.finalPayout !== undefined ? override.finalPayout : calcFinalPayout
+        finalPayout: override && override.finalPayout !== undefined ? override.finalPayout : calcFinalPayout,
+        isOverridden: !!override
       };
     });
   }, [workers, attendance, currentWeekStart, weeklyOverrides]);
 
+  const handleOverrideChange = (workerId: string, field: string, value: any) => {
+    setWeeklyOverrides((prev: any) => {
+      const weekData = prev[currentWeekStart] || {};
+      const workerOverride = weekData[workerId] || {
+        finalPayout: weeklyData.find((w: any) => w.id === workerId)?.calcFinalPayout || 0
+      };
+      return {
+        ...prev,
+        [currentWeekStart]: { ...weekData, [workerId]: { ...workerOverride, [field]: value === '' ? '' : parseInt(value, 10) || 0 } }
+      };
+    });
+  };
+
+  const handleClearOverride = (workerId: string) => {
+    setWeeklyOverrides((prev: any) => {
+      if (!prev[currentWeekStart]) return prev;
+      const weekData = { ...prev[currentWeekStart] };
+      delete weekData[workerId];
+      return { ...prev, [currentWeekStart]: weekData };
+    });
+  };
+
   const reportInfo = useMemo(() => {
     if (!reportSite) return { data: [], totalLabor: 0, totalMaterials: 0 };
-    let reportData = [];
+    let reportData: any[] = [];
     let totalLabor = 0;
     let totalMaterials = 0;
-    Object.entries(attendance).forEach(([dateStr, dayData]) => {
-      const isDateInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
-      if (isDateInRange) {
-        Object.entries(dayData || {}).forEach(([workerId, record]) => {
+    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+      const isInRange = reportPeriodType === 'monthly' ? dateStr.startsWith(reportMonth) : reportWeekDates.includes(dateStr);
+      if (isInRange) {
+        Object.entries(dayData || {}).forEach(([workerId, record]: [string, any]) => {
           if (record?.present && record?.site === reportSite) {
-            const worker = workers.find((w) => w.id.toString() === workerId);
+            const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
             if (worker) {
               reportData.push({ date: dateStr, type: 'Labor', desc: `Wage: ${worker.name}`, amount: worker.dailyWage });
               totalLabor += worker.dailyWage;
@@ -335,237 +409,286 @@ export default function App() {
         });
       }
     });
-    siteExpenses.forEach((exp) => {
-      const isDateInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
-      if (isDateInRange && exp.site === reportSite) {
+    siteExpenses.forEach((exp: any) => {
+      const isInRange = reportPeriodType === 'monthly' ? exp.date.startsWith(reportMonth) : reportWeekDates.includes(exp.date);
+      if (isInRange && exp.site === reportSite) {
         reportData.push({ date: exp.date, type: 'Material', desc: exp.description, amount: exp.amount });
         totalMaterials += exp.amount;
       }
     });
+    reportData.sort((a, b) => a.date.localeCompare(b.date));
     return { data: reportData, totalLabor, totalMaterials };
   }, [attendance, siteExpenses, reportSite, reportMonth, reportPeriodType, reportWeekDates, workers]);
 
-  const totalExpensesThisMonth = useMemo(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    return siteExpenses.filter(exp => exp.date.startsWith(currentMonth)).reduce((sum, exp) => sum + exp.amount, 0);
-  }, [siteExpenses]);
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    Object.keys(attendance).forEach(date => date && years.add(date.substring(0, 4)));
+    siteExpenses.forEach((exp: any) => exp.date && years.add(exp.date.substring(0, 4)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [attendance, siteExpenses]);
 
-  // --- Export functions ---
+  // --- Exports ---
+  const utf8BOM = "\uFEFF"; 
+  
+  const escapeCSV = (str: any) => {
+    if (str == null) return '';
+    const stringValue = String(str);
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
   const exportWeeklyCSV = () => {
     const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay'];
-    const rows = weeklyData.map(d => [d.name, d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => escapeCSV(cell)).join(',')).join('\n');
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Weekly_Settlement_${currentWeekStart}.csv`);
+    const rows = weeklyData.map(d => [escapeCSV(d.name), d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Weekly_Settlement_${currentWeekStart}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  };
+
+  const exportSiteReportCSV = () => {
+    const headers = ['Date', 'Type', 'Description', 'Amount (₹)'];
+    const rows = reportInfo.data.map(d => [d.date, escapeCSV(d.type), escapeCSV(d.desc), d.amount]);
+    rows.push(['', '', 'Total Labor:', reportInfo.totalLabor]);
+    rows.push(['', '', 'Total Materials:', reportInfo.totalMaterials]);
+    rows.push(['', '', 'Grand Total:', reportInfo.totalLabor + reportInfo.totalMaterials]);
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const periodStr = reportPeriodType === 'monthly' ? reportMonth : `Week_${reportWeekStart}`;
+    link.setAttribute("download", `Site_Report_${reportSite}_${periodStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportInventoryCSV = () => {
+    const headers = ['Tool Name', 'Status', 'Assigned Worker', 'Assigned Site', 'Checkout Date'];
+    const rows = inventory.map((t: any) => [escapeCSV(t.name), escapeCSV(t.status), escapeCSV(t.assignedWorker || 'None'), escapeCSV(t.assignedSite || 'None'), t.checkoutDate || 'N/A']);
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Inventory_Status.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const exportMasterAttendanceCSV = () => {
     const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)'];
-    const rows = [];
-    Object.entries(attendance).forEach(([dateStr, dayData]) => {
-      Object.entries(dayData).forEach(([workerId, record]) => {
-        const worker = workers.find((w) => w.id.toString() === workerId);
-        if (worker) rows.push([dateStr, worker.name, record.site || 'None', record.present ? 'Yes' : 'No', record.advance || 0]);
+    const rows: any[] = [];
+    Object.entries(attendance).forEach(([dateStr, dayData]: [string, any]) => {
+      if (exportYear !== 'All' && !dateStr.startsWith(exportYear)) return;
+      Object.entries(dayData).forEach(([workerId, record]: [string, any]) => {
+        const worker = workers.find((w: any) => w.id.toString() === workerId) as any;
+        if (worker) rows.push([dateStr, escapeCSV(worker.name), escapeCSV(record.site || 'None'), record.present ? 'Yes' : 'No', record.advance || 0]);
       });
     });
-    const csvContent = [headers, ...rows].map(row => row.map(cell => escapeCSV(cell)).join(',')).join('\n');
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Attendance_Backup.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    rows.sort((a, b) => b[0].localeCompare(a[0]));
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Attendance_Backup_${exportYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const exportMasterExpensesCSV = () => {
     const headers = ['Date', 'Site', 'Description', 'Amount (₹)'];
-    const rows = siteExpenses.map((exp) => [exp.date, exp.site, exp.description, exp.amount]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => escapeCSV(cell)).join(',')).join('\n');
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Expense_Backup.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filteredExpenses = exportYear === 'All' ? siteExpenses : siteExpenses.filter((exp: any) => exp.date.startsWith(exportYear));
+    const rows = filteredExpenses.map((exp: any) => [exp.date, escapeCSV(exp.site), escapeCSV(exp.description), exp.amount]);
+    rows.sort((a, b) => b[0].localeCompare(a[0]));
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Expense_Backup_${exportYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  // --- Login screen ---
-  if (!role) {
+  // --- Component Renders ---
+  if (!isConfigValid) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-900">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-          <div className="bg-slate-900 p-8 text-center text-white">
-            <Building className="text-yellow-400 mx-auto mb-3" size={48} />
-            <h1 className="text-2xl font-bold">Contractor Pro</h1>
-            <p className="text-slate-400 text-sm">Offline Template Mode</p>
-          </div>
-          <div className="p-8 space-y-8">
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-blue-600" size={20} /> Admin Access</h2>
-              <form onSubmit={(e) => handleLogin(e, 'admin')} className="space-y-3">
-                <input type="password" placeholder="Enter Password" value={pinInput} onChange={(e) => setPinInput(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-wider text-xl font-medium" />
-                {pinError && <p className="text-red-500 text-sm text-center font-medium">{pinError}</p>}
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm">Login</button>
-              </form>
-            </div>
-            <div className="relative flex items-center"><div className="flex-grow border-t border-slate-200"></div><span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-widest">OR</span><div className="flex-grow border-t border-slate-200"></div></div>
-            <div className="space-y-4 text-center">
-               <h2 className="text-lg font-bold flex items-center justify-center gap-2"><Eye className="text-indigo-600" size={20} /> Worker Access</h2>
-               <button onClick={() => handleLogin(null, 'viewer')} className="w-full bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold py-3 rounded-lg transition-colors">View Mode</button>
-            </div>
-          </div>
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-red-200 text-center max-w-md text-slate-800">
+          <AlertTriangle className="text-red-500 mx-auto mb-4" size={48} />
+          <h2 className="text-xl font-bold mb-2">Configuration Required</h2>
+          <p className="text-slate-600 mb-6">Please provide valid Firebase credentials in the <code className="bg-slate-100 px-1 rounded">firebaseConfig</code> object to enable cloud syncing.</p>
+          <button onClick={handleViewerLogin} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold">Try Offline Viewer Mode</button>
         </div>
       </div>
     );
   }
 
-  // --- Main app UI ---
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
-      <header className="bg-slate-900 text-white p-4 shadow-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center justify-between w-full md:w-auto">
-            <div className="flex items-center gap-2">
-              <Building className="text-yellow-400" />
-              <h1 className="text-xl font-bold">Contractor Pro</h1>
-              <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${role === 'admin' ? 'bg-blue-600' : 'bg-slate-700'}`}>
-                {role === 'admin' ? 'ADMIN' : 'VIEWER'}
-              </span>
-            </div>
-            <div className="text-[10px] font-bold flex items-center gap-1 bg-slate-800 px-2 py-1 rounded text-slate-400 uppercase">
-               {syncStatus}
-            </div>
+  if (!role) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 text-slate-800">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+          <div className="bg-slate-900 p-8 text-center text-white">
+            <Building className="text-yellow-400 mx-auto mb-3" size={48} />
+            <h1 className="text-2xl font-bold">Contractor Pro</h1>
           </div>
-          <div className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full md:w-auto">
-            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Calendar size={16} /> Daily Log</button>
-            <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'weekly' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Wallet size={16} /> Settlement</button>
+          {showAdminSetup ? (
+            <div className="p-8 space-y-6">
+              <button onClick={() => setShowAdminSetup(false)} className="text-slate-500 mb-4">← Back</button>
+              <form onSubmit={handleAdminSetup} className="space-y-3">
+                <input type="email" placeholder="Admin Email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="w-full p-3 border rounded-lg" />
+                <input type="password" placeholder="Password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full p-3 border rounded-lg" />
+                <input type="password" placeholder="Confirm" value={adminPasswordConfirm} onChange={(e) => setAdminPasswordConfirm(e.target.value)} className="w-full p-3 border rounded-lg" />
+                {setupError && <p className="text-red-500 text-sm">{setupError}</p>}
+                <button type="submit" className="w-full bg-green-600 text-white py-3 rounded-lg font-bold">Create Account</button>
+              </form>
+            </div>
+          ) : (
+            <div className="p-8 space-y-8">
+              <form onSubmit={handleSecureLogin} className="space-y-3">
+                <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full p-3 border rounded-lg" />
+                <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full p-3 border rounded-lg" />
+                {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+                <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><Lock size={16} /> Login</button>
+                <button type="button" onClick={() => setShowAdminSetup(true)} className="w-full text-blue-600 text-sm mt-2">Create Admin</button>
+              </form>
+              <div className="border-t pt-4">
+                <button onClick={handleViewerLogin} className="w-full bg-slate-50 border py-3 rounded-lg font-bold text-slate-600 flex items-center justify-center gap-2"><Eye size={16} /> View Data (No Password)</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+      <header className="bg-slate-900 text-white p-4 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Building className="text-yellow-400" />
+            <h1 className="text-xl font-bold">Contractor Pro</h1>
+            <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role}</span>
+            <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
+          </div>
+          <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full md:w-auto">
+            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Daily Log</button>
+            <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'weekly' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wallet size={14}/> Settlement</button>
             {role === 'admin' && (
               <>
-                <button onClick={() => setActiveTab('reports')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><FileSpreadsheet size={16} /> Reports</button>
-                <button onClick={() => setActiveTab('tools')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'tools' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Wrench size={16} /> Tools</button>
-                <button onClick={() => setActiveTab('manage')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'manage' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Users size={16} /> Manage</button>
-                <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}><Settings size={16} /> Settings</button>
+                <button onClick={() => setActiveTab('reports')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'reports' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><FileSpreadsheet size={14}/> Reports</button>
+                <button onClick={() => setActiveTab('tools')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'tools' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wrench size={14}/> Tools</button>
+                <button onClick={() => setActiveTab('manage')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'manage' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Users size={14}/> Manage</button>
+                <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Settings size={14}/> Settings</button>
               </>
             )}
-            <button onClick={() => setRole(null)} className="ml-2 text-slate-500 hover:text-red-400 p-1.5"><LogOut size={18} /></button>
-          </div>
+            <button onClick={() => setRole(null)} className="p-1.5 text-slate-500 hover:text-red-400 ml-2"><LogOut size={18} /></button>
+          </nav>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-6 space-y-6">
+        
+        {/* DAILY TAB */}
         {activeTab === 'daily' && (
-          <div className="space-y-6">
-            {/* Wallet & Calendar widget */}
-            <div className="bg-white rounded-xl shadow-sm border p-4 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <Wallet className="text-green-600" size={24} />
-                <div>
-                  <p className="text-xs text-slate-500">Total Expenses This Month</p>
-                  <p className="text-2xl font-bold text-green-600">₹{totalExpensesThisMonth}</p>
-                </div>
-              </div>
-              <Calendar className="text-slate-400" size={20} />
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold flex items-center gap-2"><ClipboardList className="text-blue-600" /> Attendance Log</h2>
+              <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border rounded-lg text-sm bg-white" />
             </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ClipboardList className="text-blue-600" /> Attendance Log</h2>
-                <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm font-medium bg-white" />
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead><tr className="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold"><th className="p-4 border-b">Worker</th><th className="p-4 border-b text-center">Present?</th><th className="p-4 border-b">Site</th><th className="p-4 border-b">Advance Given</th></tr></thead>
-                  <tbody>
-                    {workers.length === 0 ? <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in Manage tab.</td></tr> : workers.map((worker) => {
-                      const todayData = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
-                      return (
-                        <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
-                          <td className="p-4 font-medium">{worker.name} {role === 'admin' && <span className="text-[10px] text-slate-400 block font-bold uppercase">₹{worker.dailyWage} / day</span>}</td>
-                          <td className="p-4 text-center"><input type="checkbox" checked={todayData.present} onChange={(e) => handleAttendanceChange(worker.id, 'present', e.target.checked)} disabled={role !== 'admin'} className="w-5 h-5 text-blue-600 rounded" /></td>
-                          <td className="p-4">
-                            <select value={todayData.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !todayData.present} className="w-full p-2 border border-slate-300 rounded bg-white text-sm">
-                              <option value="">Select Site...</option>
-                              {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                            </select>
-                          </td>
-                          <td className="p-4">
-                            <div className="relative"><span className="absolute left-2 top-2 text-slate-400 text-sm">₹</span>
-                              <input type="number" value={todayData.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 pl-6 border border-slate-300 rounded text-sm" placeholder="0" />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {role === 'admin' && (
-                <div className="p-6 bg-slate-50 border-t border-slate-200">
-                  <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Receipt className="text-orange-500" size={16} /> Site Material Expenses ({currentDate})</h3>
-                  <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
-                    <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Select Site...</option>{sites.map((s, i) => <option key={i} value={s}>{s}</option>)}</select>
-                    <input required name="desc" type="text" className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" placeholder="Expense description..." />
-                    <input required name="amount" type="number" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" placeholder="Amount" />
-                    <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors shadow-sm">Add</button>
-                  </form>
-                  {siteExpenses.length > 0 && (
-                    <div className="mt-6 pt-6 border-t border-slate-200">
-                      <h4 className="text-sm font-bold mb-3">Recent Expenses</h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {siteExpenses.slice(-10).reverse().map((exp) => (
-                          <div key={exp.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded text-sm group">
-                            <span>{exp.date} - {exp.site}: {exp.description} - ₹{exp.amount}</span>
-                            <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
+                  <tr><th className="p-4">Worker</th><th className="p-4 text-center">Present</th><th className="p-4">Site</th><th className="p-4">Advance</th></tr>
+                </thead>
+                <tbody>
+                  {workers.length === 0 ? (
+                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
+                  ) : workers.map((worker: any) => {
+                    const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
+                    return (
+                      <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-medium">{worker.name} {role === 'admin' && <span className="text-[10px] text-slate-400 block font-bold">₹{worker.dailyWage}/DAY</span>}</td>
+                        <td className="p-4 text-center">
+                          <input type="checkbox" checked={data.present} onChange={(e) => handleAttendanceChange(worker.id, 'present', e.target.checked)} disabled={role !== 'admin'} className="w-5 h-5 cursor-pointer" />
+                        </td>
+                        <td className="p-4">
+                          <select value={data.site} onChange={(e) => handleAttendanceChange(worker.id, 'site', e.target.value)} disabled={role !== 'admin' || !data.present} className="w-full p-2 border rounded bg-white text-sm">
+                            <option value="">Select Site...</option>
+                            {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                          </select>
+                        </td>
+                        <td className="p-4">
+                          <input type="number" value={data.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 border rounded text-sm bg-white" placeholder="₹ 0" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
+            {role === 'admin' && (
+              <div className="p-6 bg-slate-50 border-t border-slate-200">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Receipt className="text-orange-500" size={16} /> Site Material Expenses ({currentDate})</h3>
+                <form onSubmit={handleAddExpense} className="flex flex-wrap gap-3 items-end">
+                  <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
+                    <option value="">Select Site...</option>
+                    {sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+                  </select>
+                  <input required name="desc" placeholder="Expense description..." className="flex-[2] min-w-[200px] p-2 border border-slate-300 rounded text-sm" />
+                  <input required name="amount" type="number" placeholder="Amount" className="flex-1 min-w-[100px] p-2 border border-slate-300 rounded text-sm" />
+                  <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded transition-colors font-bold shadow-sm">Add</button>
+                </form>
+              </div>
+            )}
           </div>
         )}
 
+        {/* WEEKLY SETTLEMENT TAB */}
         {activeTab === 'weekly' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Wallet className="text-green-500" /> Weekly Settlement</h2>
-                <p className="text-slate-500 text-sm mt-1">Week of {currentWeekStart}</p>
-              </div>
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="p-6 border-b bg-slate-50 flex justify-between items-center flex-wrap gap-4">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Wallet className="text-green-600" /> Settlement for {currentWeekStart}</h2>
               {role === 'admin' && (
-                <button onClick={exportWeeklyCSV} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm">
-                  <Download size={14} /> Export CSV
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setIsEditingSettlement(!isEditingSettlement)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors">
+                    {isEditingSettlement ? <><X size={14}/> Finish Editing</> : <><Edit2 size={14}/> Manual Edit</>}
+                  </button>
+                  <button onClick={exportWeeklyCSV} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition-colors"><Download size={14} /> Export CSV</button>
+                </div>
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead><tr className="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold"><th className="p-4 border-b">Worker</th><th className="p-4 border-b text-center">Days</th><th className="p-4 border-b text-right">Earned</th><th className="p-4 border-b text-right">Advances</th><th className="p-4 border-b text-right">Payout</th></tr></thead>
-                <tbody>
-                  {weeklyData.length === 0 ? <tr><td colSpan={5} className="p-8 text-center text-slate-400">No workers available</td></tr> : weeklyData.map((worker) => (
-                    <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
-                      <td className="p-4 font-medium">{worker.name}</td>
-                      <td className="p-4 text-center font-bold">{worker.daysWorked}</td>
-                      <td className="p-4 text-right">₹{worker.totalEarned}</td>
-                      <td className="p-4 text-right">₹{worker.totalAdvances}</td>
-                      <td className="p-4 text-right font-bold text-green-600">₹{worker.finalPayout}</td>
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-100 font-bold text-xs uppercase text-slate-500">
+                  <tr><th className="p-4 border-b">Worker</th><th className="p-4 text-center border-b">Days</th><th className="p-4 text-right border-b">Earned</th><th className="p-4 text-right border-b">Advance</th><th className="p-4 text-right border-b font-bold text-slate-800 bg-slate-200">Final Payout</th></tr>
+                </thead>
+                <tbody className="text-sm">
+                  {weeklyData.map((w: any) => (
+                    <tr key={w.id} className="border-b hover:bg-slate-50">
+                      <td className="p-4 font-bold">{w.name}</td>
+                      <td className="p-4 text-center font-bold text-blue-600">{w.daysWorked}</td>
+                      <td className="p-4 text-right">₹{w.totalEarned}</td>
+                      <td className="p-4 text-right text-red-600">₹{w.totalAdvances}</td>
+                      <td className="p-4 text-right font-bold text-lg bg-green-50 text-green-800">
+                        {isEditingSettlement && role === 'admin' ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <input type="number" value={w.finalPayout} onChange={(e) => handleOverrideChange(w.id, 'finalPayout', e.target.value)} className="w-20 p-1 border border-indigo-400 rounded text-right text-sm bg-white" /> 
+                            {w.isOverridden && <button onClick={() => handleClearOverride(w.id)} className="text-slate-400 hover:text-red-500 transition-colors"><RotateCcw size={16} /></button>}
+                          </div>
+                        ) : (
+                           <span className={w.isOverridden ? "text-indigo-600 underline decoration-dotted" : ""}>₹{w.finalPayout}</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -574,121 +697,105 @@ export default function App() {
           </div>
         )}
 
+        {/* REPORTS TAB */}
         {activeTab === 'reports' && role === 'admin' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-            <h2 className="text-lg font-bold flex items-center gap-2"><FileSpreadsheet className="text-blue-600" /> Site Reports</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="p-2 border border-slate-300 rounded text-sm bg-white">
-                <option value="">Select Site...</option>
-                {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
-              </select>
-              <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="p-2 border border-slate-300 rounded text-sm bg-white">
-                <option value="monthly">Monthly</option>
-                <option value="weekly">Weekly</option>
-              </select>
-              {reportPeriodType === 'monthly' && <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="p-2 border border-slate-300 rounded text-sm bg-white" />}
-              {reportPeriodType === 'weekly' && <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="p-2 border border-slate-300 rounded text-sm bg-white" />}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><FileSpreadsheet className="text-indigo-600" /> Site Ledger</h2>
+              </div>
+              <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white font-bold"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select>
+                {reportPeriodType === 'monthly' ? <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" /> : <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" />}
+                <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="flex-grow p-2 border border-slate-300 rounded-lg text-sm bg-white"><option value="">Choose Site...</option>{sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}</select>
+              </div>
             </div>
-            {reportSite && (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[500px]">
-                    <thead><tr className="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold"><th className="p-4 border-b">Date</th><th className="p-4 border-b">Type</th><th className="p-4 border-b">Description</th><th className="p-4 border-b text-right">Amount</th></tr></thead>
+            {reportSite ? (
+              <div className="p-6">
+                <div className="flex justify-end mb-4"><button onClick={exportSiteReportCSV} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-xs font-bold flex items-center gap-2 transition-colors"><Download size={14} /> Download Excel</button></div>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead><tr className="bg-indigo-50 text-indigo-900 text-[10px] uppercase tracking-widest"><th className="p-3 border-b">Date</th><th className="p-3 border-b">Type</th><th className="p-3 border-b">Description</th><th className="p-3 border-b text-right">Amount</th></tr></thead>
                     <tbody>
-                      {reportInfo.data.map((item, i) => (
-                        <tr key={i} className="border-b hover:bg-slate-50">
-                          <td className="p-4 text-sm">{item.date}</td>
-                          <td className="p-4 text-sm"><span className={`px-2 py-1 rounded text-xs font-bold ${item.type === 'Labor' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>{item.type}</span></td>
-                          <td className="p-4 text-sm">{item.desc}</td>
-                          <td className="p-4 text-sm text-right font-bold">₹{item.amount}</td>
-                        </tr>
-                      ))}
+                      {reportInfo.data.length > 0 ? reportInfo.data.map((r, i) => (
+                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors"><td className="p-3 text-slate-500 text-sm">{r.date}</td><td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.type === 'Labor' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>{r.type.toUpperCase()}</span></td><td className="p-3 font-medium text-sm">{r.desc}</td><td className="p-3 text-right font-bold text-sm">₹{r.amount}</td></tr>
+                      )) : <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest opacity-50">No records found</td></tr>}
                     </tbody>
+                    <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-200"><tr className="text-lg"><td colSpan={3} className="p-4 text-right text-slate-800">Total:</td><td className="p-4 text-right text-indigo-700">₹{reportInfo.totalLabor + reportInfo.totalMaterials}</td></tr></tfoot>
                   </table>
                 </div>
-                <div className="p-4 bg-slate-100 rounded-lg grid grid-cols-3 gap-4 text-sm font-bold">
-                  <div>Labor: ₹{reportInfo.totalLabor}</div>
-                  <div>Materials: ₹{reportInfo.totalMaterials}</div>
-                  <div className="text-right">Total: ₹{reportInfo.totalLabor + reportInfo.totalMaterials}</div>
-                </div>
-                <button onClick={() => generateCSV(reportInfo.data, `report-${reportSite}-${new Date().toISOString().split('T')[0]}.csv`)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center gap-2">
-                  <Download size={16} /> Export CSV
-                </button>
-              </>
-            )}
+              </div>
+            ) : <div className="p-16 text-center text-slate-400"><FileSpreadsheet size={48} className="mx-auto mb-4 opacity-20" /><p className="font-bold">Select a site to view records</p></div>}
           </div>
         )}
 
+        {/* TOOLS TAB */}
         {activeTab === 'tools' && role === 'admin' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-            <h2 className="text-lg font-bold flex items-center gap-2"><Wrench className="text-blue-600" /> Tool Inventory</h2>
-            <form onSubmit={handleAddTool} className="flex gap-2">
-              <input required name="toolName" type="text" className="flex-grow p-2 border border-slate-300 rounded text-sm" placeholder="Tool name..." />
-              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors">Add Tool</button>
-            </form>
-            <div className="space-y-4">
-              {inventory.length === 0 ? (
-                <p className="text-center text-slate-400 py-8">No tools added yet</p>
-              ) : (
-                inventory.map((tool) => (
-                  <div key={tool.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="font-bold text-slate-800">{tool.name}</p>
-                        <p className={`text-xs font-bold uppercase ${tool.status === 'Available' ? 'text-green-600' : 'text-orange-600'}`}>{tool.status}</p>
-                      </div>
-                      {tool.status === 'Assigned' && <button onClick={() => handleReturnTool(tool.id)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-1 px-3 rounded text-xs">Return</button>}
-                    </div>
-                    {tool.status === 'Assigned' && (
-                      <p className="text-sm text-slate-600">Assigned to {tool.assignedWorker} at {tool.assignedSite}</p>
-                    )}
-                    {tool.status === 'Available' && (
-                      <form onSubmit={handleAssignTool} className="flex gap-2 flex-wrap">
-                        <select required name="workerId" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
-                          <option value="">Select Worker...</option>
-                          {workers.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                        </select>
-                        <select required name="site" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
-                          <option value="">Select Site...</option>
-                          {sites.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                        </select>
-                        <input type="hidden" name="toolId" value={tool.id} />
-                        <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm">Assign</button>
-                      </form>
-                    )}
-                  </div>
-                ))
-              )}
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row gap-6">
+              <div className="flex-1 space-y-4">
+                <h2 className="text-sm font-black flex items-center gap-2 text-slate-800"><Wrench size={16} /> CHECKOUT TOOL</h2>
+                <form onSubmit={handleAssignTool} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <select required name="toolId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Select Tool...</option>{inventory.filter((t: any) => t.status === 'Available').map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                  <select required name="workerId" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Worker...</option>{workers.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+                  <select required name="site" className="p-2 border border-slate-300 rounded text-sm bg-white"><option value="">Site...</option>{sites.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}</select>
+                  <button type="submit" className="sm:col-span-3 bg-slate-800 text-white font-bold py-2 rounded text-sm hover:bg-slate-900 transition-colors">Assign to Site</button>
+                </form>
+              </div>
+              <div className="md:w-px md:bg-slate-200"></div>
+              <div className="flex-1 space-y-4">
+                <h2 className="text-sm font-black flex items-center gap-2 text-slate-800"><Plus size={16} /> NEW MACHINE</h2>
+                <form onSubmit={handleAddTool} className="flex gap-2"><input required name="name" type="text" className="flex-grow p-2 border border-slate-300 rounded text-sm" placeholder="Mixer, Drills..." /><button type="submit" className="bg-slate-200 text-slate-800 font-black py-2 px-4 rounded text-sm hover:bg-slate-300 transition-colors">Add</button></form>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center"><h2 className="text-xs font-black uppercase tracking-widest text-slate-600">Inventory Status</h2><button onClick={exportInventoryCSV} className="text-blue-600 hover:text-blue-800 transition-colors text-xs font-bold flex items-center gap-1"><Download size={12}/> Audit List</button></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead><tr className="bg-slate-100 text-slate-600 text-[10px] uppercase tracking-widest"><th className="p-4 border-b">Tool</th><th className="p-4 border-b text-center">Status</th><th className="p-4 border-b">Assigned To</th><th className="p-4 border-b">Site</th><th className="p-4 border-b text-center">Action</th></tr></thead>
+                  <tbody className="text-sm">
+                    {inventory.map((t: any) => (
+                      <tr key={t.id} className="border-b hover:bg-slate-50 transition-colors"><td className="p-4 font-bold">{t.name}</td><td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black ${t.status === 'Available' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{t.status.toUpperCase()}</span></td><td className="p-4 font-medium text-slate-600">{t.assignedWorker || '-'}</td><td className="p-4 font-medium text-slate-600">{t.assignedSite || '-'}</td><td className="p-4 text-center">
+                        {t.status === 'Assigned' ? <button onClick={() => handleReturnTool(t.id)} className="bg-indigo-600 text-white px-3 py-1 rounded text-[10px] font-bold hover:bg-indigo-700 shadow-sm transition-colors">RETURN</button> : <button onClick={() => handleDeleteTool(t.id)} className="text-red-300 hover:text-red-500 p-1 transition-colors"><Trash2 size={16} /></button>}
+                      </td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
+        {/* MANAGE TAB */}
         {activeTab === 'manage' && role === 'admin' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-              <h2 className="text-lg font-bold flex items-center gap-2"><Users className="text-blue-600" /> Manage Workers</h2>
-              <form onSubmit={handleAddWorker} className="space-y-4">
-                <input required name="name" type="text" className="w-full p-2 border border-slate-300 rounded text-sm" placeholder="Full Name" />
-                <input required name="wage" type="number" className="w-full p-2 border border-slate-300 rounded text-sm" placeholder="Daily Wage (₹)" />
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={16} /> Add Worker</button>
+            <div className="bg-white p-6 rounded-xl border shadow-sm">
+              <h2 className="font-bold mb-4 flex items-center gap-2"><Users size={20} className="text-blue-600" /> Manage Workers</h2>
+              <form onSubmit={handleAddWorker} className="space-y-2">
+                <input required name="name" placeholder="Full Name" className="w-full p-2 border rounded text-sm" />
+                <input required name="wage" type="number" placeholder="Daily Wage (₹)" className="w-full p-2 border rounded text-sm" />
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold shadow-sm flex items-center justify-center gap-2"><Plus size={16} /> Add Worker</button>
               </form>
-              <div className="space-y-2 pt-4 border-t">
-                {workers.map((w) => (
-                  <div key={w.id} className="p-2 bg-slate-50 border border-slate-200 rounded flex justify-between items-center group">
-                    <span className="text-sm font-bold">{w.name} (₹{w.dailyWage})</span>
-                    <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
+              <div className="mt-4 space-y-1">
+                {workers.map((w: any) => (
+                  <div key={w.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
+                    <span className="text-sm font-medium">{w.name} (₹{w.dailyWage})</span>
+                    <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Building className="text-blue-600" /> Manage Sites</h2>
-              <form onSubmit={handleAddSite} className="flex gap-2"><input required name="site" type="text" className="flex-grow p-2 border border-slate-300 rounded text-sm" placeholder="Site Name" /><button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded text-sm transition-colors shadow-sm">Add</button></form>
-              <div className="space-y-2 pt-4 border-t">
+            <div className="bg-white p-6 rounded-xl border shadow-sm">
+              <h2 className="font-bold mb-4 flex items-center gap-2"><Building size={20} className="text-blue-600" /> Manage Sites</h2>
+              <form onSubmit={handleAddSite} className="flex gap-2">
+                <input required name="site" placeholder="Site Name" className="flex-grow p-2 border rounded text-sm" />
+                <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-4 rounded transition-colors font-bold shadow-sm">Add</button>
+              </form>
+              <div className="mt-4 space-y-1">
                 {sites.map((s, i) => (
-                  <div key={i} className="p-2 bg-slate-50 border border-slate-200 rounded flex justify-between items-center group">
-                    <span className="text-sm font-bold">{s}</span>
-                    <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
+                  <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
+                    <span className="text-sm font-medium">{s as string}</span>
+                    <button onClick={() => handleDeleteSite(s as string)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
@@ -696,31 +803,36 @@ export default function App() {
           </div>
         )}
 
+        {/* SETTINGS TAB */}
         {activeTab === 'settings' && role === 'admin' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-            <h2 className="text-lg font-bold flex items-center gap-2"><Settings className="text-blue-600" /> Settings</h2>
+          <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto">
+            <h2 className="font-bold mb-6 flex items-center gap-2"><Settings size={20} className="text-blue-600" /> App Settings</h2>
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-slate-700"><strong>Cloud Status:</strong> {syncStatus}</p>
-                <p className="text-xs text-slate-600 mt-2">Data is automatically saved to Firebase when connected. Configure your Firebase credentials in the code to enable cloud sync.</p>
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-xs text-blue-800 font-bold uppercase tracking-wider mb-1">Sync Info</p>
+                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Database size={14} /> Connection: {syncStatus}</p>
               </div>
-              <div className="flex flex-col gap-2">
-                <button onClick={exportMasterAttendanceCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-3 rounded font-bold transition-colors flex items-center justify-center gap-2 border">
-                  <Download size={16} /> Backup Attendance
-                </button>
-                <button onClick={exportMasterExpensesCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-3 rounded font-bold transition-colors flex items-center justify-center gap-2 border">
-                  <Download size={16} /> Backup Expenses
-                </button>
+              
+              <div className="border-t border-b py-4 space-y-3">
+                 <div className="flex items-center justify-between mb-2">
+                   <span className="text-sm font-bold text-slate-700">Backup Data</span>
+                   <select value={exportYear} onChange={(e) => setExportYear(e.target.value)} className="p-1 border rounded text-xs bg-slate-50">
+                     <option value="All">All Time</option>
+                     {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                   </select>
+                 </div>
+                 <button onClick={exportMasterAttendanceCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded font-bold transition-colors flex items-center justify-center gap-2 border text-sm"><Download size={14} /> Attendance History</button>
+                 <button onClick={exportMasterExpensesCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded font-bold transition-colors flex items-center justify-center gap-2 border text-sm"><Download size={14} /> Material Expenses</button>
               </div>
-              <button onClick={() => setConfirmClear(true)} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded text-sm transition-colors flex items-center justify-center gap-2">
-                <RotateCcw size={16} /> Clear All Data
-              </button>
+
+              <button onClick={() => setConfirmClear(true)} className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded font-bold transition-colors shadow-sm">Clear Data</button>
+              
               {confirmClear && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm font-bold text-red-700 mb-3">This will permanently delete all attendance and expense data. Are you sure?</p>
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded animate-pulse">
+                  <p className="text-red-700 font-bold mb-2 text-sm">CRITICAL: This will permanently delete all worker logs. Continue?</p>
                   <div className="flex gap-2">
-                    <button onClick={handleClearData} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded text-sm">Yes, Clear All</button>
-                    <button onClick={() => setConfirmClear(false)} className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 font-bold py-2 rounded text-sm">Cancel</button>
+                    <button onClick={handleClearData} className="flex-1 bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold text-xs uppercase transition-colors">Yes, Delete</button>
+                    <button onClick={() => setConfirmClear(false)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 p-2 rounded font-bold text-xs uppercase transition-colors">Cancel</button>
                   </div>
                 </div>
               )}
