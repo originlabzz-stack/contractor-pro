@@ -3,7 +3,7 @@ import {
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
   Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
-  RotateCcw, Edit2, X, Database, Save
+  RotateCcw, Edit2, X, Database, Save, IndianRupee, Printer, Briefcase
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -35,6 +35,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
+
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -66,12 +67,18 @@ export default function App() {
   const [setupError, setSetupError] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily');
+  
+  // Master Data States
   const [workers, setWorkers] = useState([]);
   const [sites, setSites] = useState([]);
+  const [clients, setClients] = useState([]);
+  
+  // Tracking States
   const [attendance, setAttendance] = useState({});
   const [siteExpenses, setSiteExpenses] = useState([]);
   const [weeklyOverrides, setWeeklyOverrides] = useState({}); 
   const [inventory, setInventory] = useState([]);
+  const [clientPayments, setClientPayments] = useState([]);
   
   // UI States
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -82,6 +89,7 @@ export default function App() {
   const [isEditingSettlement, setIsEditingSettlement] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [exportYear, setExportYear] = useState('All');
+  const [paymentFilterClient, setPaymentFilterClient] = useState('');
   
   // Expense Editing State
   const [editingExpenseId, setEditingExpenseId] = useState(null);
@@ -128,10 +136,12 @@ export default function App() {
         const data = docSnap.data();
         if (data.workers) setWorkers(data.workers);
         if (data.sites) setSites(data.sites);
+        if (data.clients) setClients(data.clients);
         if (data.attendance) setAttendance(data.attendance);
         if (data.siteExpenses) setSiteExpenses(data.siteExpenses);
         if (data.weeklyOverrides) setWeeklyOverrides(data.weeklyOverrides);
         if (data.inventory) setInventory(data.inventory);
+        if (data.clientPayments) setClientPayments(data.clientPayments);
       }
       setIsCloudSynced(true);
       setSyncStatus('Synced');
@@ -150,7 +160,7 @@ export default function App() {
       try {
         const docRef = doc(db, 'dashboard_data', appId);
         await setDoc(docRef, { 
-          workers, sites, attendance, siteExpenses, weeklyOverrides, inventory,
+          workers, sites, clients, attendance, siteExpenses, weeklyOverrides, inventory, clientPayments,
           lastUpdated: new Date().toISOString()
         });
         setSyncStatus('Synced');
@@ -161,7 +171,7 @@ export default function App() {
     };
     const timeoutId = setTimeout(saveData, 1500); 
     return () => clearTimeout(timeoutId);
-  }, [workers, sites, attendance, siteExpenses, weeklyOverrides, inventory, isCloudSynced, user, role]);
+  }, [workers, sites, clients, attendance, siteExpenses, weeklyOverrides, inventory, clientPayments, isCloudSynced, user, role]);
   
   const handleSecureLogin = async (e) => {
     e.preventDefault();
@@ -241,6 +251,7 @@ export default function App() {
     });
   };
 
+  // --- Manage Handlers ---
   const handleAddWorker = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -262,6 +273,21 @@ export default function App() {
     }
   };
 
+  const handleAddClient = (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const client = formData.get('client');
+    if (client && !clients.includes(client)) {
+      setClients([...clients, client]);
+      e.target.reset();
+    }
+  };
+
+  const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
+  const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
+  const handleDeleteClient = (client) => { if (role === 'admin') setClients(clients.filter((c) => c !== client)); };
+
+  // --- Expense Handlers ---
   const handleAddExpense = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -297,9 +323,30 @@ export default function App() {
     setEditingExpenseId(null);
   };
 
-  const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
-  const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
+  // --- Payment Handlers ---
+  const handleAddClientPayment = (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const date = formData.get('date');
+    const client = formData.get('client');
+    const amount = parseInt(formData.get('amount'), 10);
+    const mode = formData.get('mode');
+    const remarks = formData.get('remarks') || '-';
 
+    if (date && client && !isNaN(amount)) {
+      setClientPayments([...clientPayments, { id: Date.now(), date, client, amount, mode, remarks }]);
+      e.target.reset();
+      // Keep the selected date and client to make bulk entry easier
+      e.target.date.value = date;
+      e.target.client.value = client;
+    }
+  };
+
+  const handleDeletePayment = (id) => {
+    if (role === 'admin') setClientPayments(clientPayments.filter(p => p.id !== id));
+  };
+
+  // --- Tools Handlers ---
   const handleAddTool = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -343,8 +390,9 @@ export default function App() {
 
   const handleClearData = () => {
     setAttendance({});
-    setSiteExpenses([]);
+    setSiteExpenses({});
     setWeeklyOverrides({});
+    setClientPayments([]);
     setConfirmClear(false);
   };
 
@@ -485,8 +533,9 @@ export default function App() {
     const years = new Set();
     Object.keys(attendance).forEach(date => date && years.add(date.substring(0, 4)));
     siteExpenses.forEach((exp) => exp.date && years.add(exp.date.substring(0, 4)));
+    clientPayments.forEach((pay) => pay.date && years.add(pay.date.substring(0, 4)));
     return Array.from(years).sort((a, b) => b.localeCompare(a));
-  }, [attendance, siteExpenses]);
+  }, [attendance, siteExpenses, clientPayments]);
 
   const todaysExpenses = useMemo(() => {
     return siteExpenses.filter((exp) => exp.date === currentDate);
@@ -505,7 +554,6 @@ export default function App() {
       let workerCount = 0;
       if (attendance[dateStr]) {
         Object.entries(attendance[dateStr]).forEach(([workerId, record]) => {
-          // Double-check that the worker hasn't been deleted
           const workerExists = workers.some(w => w.id.toString() === workerId.toString());
           if (workerExists && record.present && record.site === calendarSite) {
             workerCount++;
@@ -531,7 +579,75 @@ export default function App() {
     return { days, blankStartDays: firstDayOfMonth };
   }, [calendarMonth, calendarSite, attendance, siteExpenses, workers]);
 
-  // --- Exports ---
+  const printClientStatement = (clientName) => {
+    const filteredPayments = clientPayments
+      .filter(p => p.client === clientName)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    const total = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Payment Statement - ${clientName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #ddd; padding-bottom: 20px; margin-bottom: 30px; }
+            .header h1 { margin: 0 0 10px 0; color: #1e293b; }
+            .header h2 { margin: 0; color: #64748b; font-weight: normal; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+            th { background-color: #f8fafc; color: #475569; font-weight: bold; text-transform: uppercase; font-size: 12px; }
+            td { font-size: 14px; }
+            .amount { text-align: right; font-weight: bold; }
+            .total-row { background-color: #f1f5f9; }
+            .total-label { font-weight: bold; text-align: right; font-size: 16px; }
+            .total-value { font-weight: bold; text-align: right; font-size: 18px; color: #0f172a; }
+            .print-date { text-align: right; font-size: 12px; color: #94a3b8; margin-top: 40px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Client Payment Statement</h1>
+            <h2>Client: <strong>${clientName}</strong></h2>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Mode of Payment</th>
+                <th>Remarks</th>
+                <th class="amount">Amount Received (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredPayments.map(p => `
+                <tr>
+                  <td>${p.date}</td>
+                  <td>${p.mode}</td>
+                  <td>${p.remarks}</td>
+                  <td class="amount">₹${p.amount.toLocaleString('en-IN')}</td>
+                </tr>
+              `).join('')}
+              ${filteredPayments.length === 0 ? '<tr><td colSpan="4" style="text-align:center;">No payments found.</td></tr>' : ''}
+              <tr class="total-row">
+                <td colspan="3" class="total-label">GRAND TOTAL:</td>
+                <td class="total-value">₹${total.toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="print-date">Generated on: ${new Date().toLocaleDateString()}</div>
+          <script>
+            window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 250); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  // --- CSV Exports ---
   const utf8BOM = "\uFEFF"; 
   
   const escapeCSV = (str) => {
@@ -626,6 +742,22 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  const exportClientPaymentsCSV = () => {
+    const headers = ['Date', 'Client', 'Mode of Payment', 'Remarks', 'Amount Received (₹)'];
+    const filteredPayments = exportYear === 'All' ? clientPayments : clientPayments.filter(p => p.date.startsWith(exportYear));
+    const rows = filteredPayments.map((p) => [p.date, escapeCSV(p.client), escapeCSV(p.mode), escapeCSV(p.remarks), p.amount]);
+    rows.sort((a, b) => b[0].localeCompare(a[0])); // Sort by date descending
+    const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Client_Payments_Backup_${exportYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
   // --- Component Renders ---
   if (!isConfigValid) {
     return (
@@ -681,23 +813,26 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <header className="bg-slate-900 text-white p-4 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Building className="text-yellow-400" />
-            <h1 className="text-xl font-bold">Contractor Pro</h1>
-            <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role}</span>
-            <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
+        <div className="max-w-6xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+          <div className="flex items-center justify-between w-full lg:w-auto">
+            <div className="flex items-center gap-2">
+              <Building className="text-yellow-400" />
+              <h1 className="text-xl font-bold">Contractor Pro</h1>
+              <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role}</span>
+              <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
+            </div>
           </div>
-          <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full md:w-auto">
-            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><ClipboardList size={14}/> Daily Log</button>
-            <button onClick={() => setActiveTab('calendar')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Site Calendar</button>
-            <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'weekly' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wallet size={14}/> Settlement</button>
+          <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full lg:w-auto hide-scrollbar">
+            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><ClipboardList size={14}/> Daily Log</button>
+            <button onClick={() => setActiveTab('calendar')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'calendar' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Site Calendar</button>
+            <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'weekly' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wallet size={14}/> Settlement</button>
             {role === 'admin' && (
               <>
-                <button onClick={() => setActiveTab('reports')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'reports' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><FileSpreadsheet size={14}/> Reports</button>
-                <button onClick={() => setActiveTab('tools')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'tools' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wrench size={14}/> Tools</button>
-                <button onClick={() => setActiveTab('manage')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'manage' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Users size={14}/> Manage</button>
-                <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Settings size={14}/> Settings</button>
+                <button onClick={() => setActiveTab('payments')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'payments' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><IndianRupee size={14}/> Payments</button>
+                <button onClick={() => setActiveTab('reports')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'reports' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><FileSpreadsheet size={14}/> Reports</button>
+                <button onClick={() => setActiveTab('tools')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'tools' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wrench size={14}/> Tools</button>
+                <button onClick={() => setActiveTab('manage')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'manage' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Users size={14}/> Manage</button>
+                <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Settings size={14}/> Settings</button>
               </>
             )}
             <button onClick={() => setRole(null)} className="p-1.5 text-slate-500 hover:text-red-400 ml-2"><LogOut size={18} /></button>
@@ -927,6 +1062,82 @@ export default function App() {
           </div>
         )}
 
+        {/* CLIENT PAYMENTS TAB */}
+        {activeTab === 'payments' && role === 'admin' && (
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50">
+              <h2 className="text-lg font-bold flex items-center gap-2"><IndianRupee className="text-emerald-600" /> Client Payments Received</h2>
+            </div>
+            <div className="p-6 border-b border-slate-200 bg-white">
+              <form onSubmit={handleAddClientPayment} className="flex flex-wrap gap-3 items-end">
+                <input required name="date" type="date" defaultValue={currentDate} className="p-2 border border-slate-300 rounded text-sm bg-white" />
+                <select required name="client" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
+                  <option value="">Select Client...</option>
+                  {clients.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                </select>
+                <input required name="amount" type="number" placeholder="Amount Received" className="flex-1 min-w-[120px] p-2 border border-slate-300 rounded text-sm" />
+                <select required name="mode" className="p-2 border border-slate-300 rounded text-sm bg-white">
+                  <option value="Cash">Cash</option>
+                  <option value="GPay">GPay</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+                <input name="remarks" placeholder="Remarks (optional)" className="flex-[2] min-w-[150px] p-2 border border-slate-300 rounded text-sm" />
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded transition-colors font-bold shadow-sm px-6">Add</button>
+              </form>
+            </div>
+            
+            <div className="p-4 bg-slate-50 flex justify-between items-center border-b border-slate-200">
+               <div className="flex items-center gap-2">
+                 <span className="text-sm font-bold text-slate-600">Filter View:</span>
+                 <select value={paymentFilterClient} onChange={(e) => setPaymentFilterClient(e.target.value)} className="p-1.5 border border-slate-300 rounded text-sm bg-white">
+                   <option value="">All Clients</option>
+                   {clients.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                 </select>
+               </div>
+               {paymentFilterClient && (
+                 <button onClick={() => printClientStatement(paymentFilterClient)} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition-colors"><Printer size={14} /> Print Statement</button>
+               )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead className="bg-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
+                  <tr><th className="p-4 border-b">Date</th><th className="p-4 border-b">Client</th><th className="p-4 border-b">Mode</th><th className="p-4 border-b">Remarks</th><th className="p-4 border-b text-right">Amount</th><th className="p-4 border-b text-center">Action</th></tr>
+                </thead>
+                <tbody className="text-sm">
+                  {clientPayments.length === 0 ? (
+                     <tr><td colSpan={6} className="p-8 text-center text-slate-400">No client payments recorded yet.</td></tr>
+                  ) : clientPayments
+                      .filter(p => paymentFilterClient === '' || p.client === paymentFilterClient)
+                      .sort((a,b) => new Date(b.date) - new Date(a.date))
+                      .map((p) => (
+                    <tr key={p.id} className="border-b hover:bg-slate-50 transition-colors">
+                      <td className="p-4 text-slate-500">{p.date}</td>
+                      <td className="p-4 font-bold">{p.client}</td>
+                      <td className="p-4"><span className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{p.mode}</span></td>
+                      <td className="p-4">{p.remarks}</td>
+                      <td className="p-4 text-right font-bold text-emerald-700">₹{p.amount.toLocaleString('en-IN')}</td>
+                      <td className="p-4 text-center">
+                        <button onClick={() => handleDeletePayment(p.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {paymentFilterClient && clientPayments.filter(p => p.client === paymentFilterClient).length > 0 && (
+                  <tfoot className="bg-slate-200 font-bold text-slate-800">
+                    <tr>
+                      <td colSpan="4" className="p-4 text-right uppercase tracking-wider text-xs">Total Received from {paymentFilterClient}:</td>
+                      <td className="p-4 text-right text-emerald-800 text-lg">₹{clientPayments.filter(p => p.client === paymentFilterClient).reduce((sum, p) => sum + p.amount, 0).toLocaleString('en-IN')}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* REPORTS TAB */}
         {activeTab === 'reports' && role === 'admin' && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -998,7 +1209,7 @@ export default function App() {
 
         {/* MANAGE TAB */}
         {activeTab === 'manage' && role === 'admin' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-xl border shadow-sm">
               <h2 className="font-bold mb-4 flex items-center gap-2"><Users size={20} className="text-blue-600" /> Manage Workers</h2>
               <form onSubmit={handleAddWorker} className="space-y-2">
@@ -1015,6 +1226,7 @@ export default function App() {
                 ))}
               </div>
             </div>
+
             <div className="bg-white p-6 rounded-xl border shadow-sm">
               <h2 className="font-bold mb-4 flex items-center gap-2"><Building size={20} className="text-blue-600" /> Manage Sites</h2>
               <form onSubmit={handleAddSite} className="flex gap-2">
@@ -1026,6 +1238,22 @@ export default function App() {
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
                     <span className="text-sm font-medium">{s}</span>
                     <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border shadow-sm">
+              <h2 className="font-bold mb-4 flex items-center gap-2"><Briefcase size={20} className="text-blue-600" /> Manage Clients</h2>
+              <form onSubmit={handleAddClient} className="flex gap-2">
+                <input required name="client" placeholder="Client Name" className="flex-grow p-2 border rounded text-sm" />
+                <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-4 rounded transition-colors font-bold shadow-sm">Add</button>
+              </form>
+              <div className="mt-4 space-y-1">
+                {clients.map((c, i) => (
+                  <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
+                    <span className="text-sm font-medium">{c}</span>
+                    <button onClick={() => handleDeleteClient(c)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
@@ -1053,13 +1281,14 @@ export default function App() {
                  </div>
                  <button onClick={exportMasterAttendanceCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded font-bold transition-colors flex items-center justify-center gap-2 border text-sm"><Download size={14} /> Attendance History</button>
                  <button onClick={exportMasterExpensesCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded font-bold transition-colors flex items-center justify-center gap-2 border text-sm"><Download size={14} /> Material Expenses</button>
+                 <button onClick={exportClientPaymentsCSV} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded font-bold transition-colors flex items-center justify-center gap-2 border text-sm"><Download size={14} /> Client Payments</button>
               </div>
 
               <button onClick={() => setConfirmClear(true)} className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded font-bold transition-colors shadow-sm">Clear Data</button>
               
               {confirmClear && (
                 <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded animate-pulse">
-                  <p className="text-red-700 font-bold mb-2 text-sm">CRITICAL: This will permanently delete all worker logs. Continue?</p>
+                  <p className="text-red-700 font-bold mb-2 text-sm">CRITICAL: This will permanently delete all logs. Continue?</p>
                   <div className="flex gap-2">
                     <button onClick={handleClearData} className="flex-1 bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold text-xs uppercase transition-colors">Yes, Delete</button>
                     <button onClick={() => setConfirmClear(false)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 p-2 rounded font-bold text-xs uppercase transition-colors">Cancel</button>
