@@ -819,7 +819,6 @@ export default function App() {
               <Building className="text-yellow-400" />
               <h1 className="text-xl font-bold">Contractor Pro</h1>
               <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role}</span>
-              <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
             </div>
           </div>
           <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full lg:w-auto hide-scrollbar">
