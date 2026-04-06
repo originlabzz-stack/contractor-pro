@@ -35,7 +35,6 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
-
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -234,7 +233,7 @@ export default function App() {
     if (role !== 'admin') return; 
     setAttendance((prev) => {
       const dayData = prev[currentDate] || {};
-      const workerData = dayData[workerId] || { present: false, site: '', advance: 0 };
+      const workerData = dayData[workerId] || { present: false, site: '', advance: 0, advanceMethod: 'Cash' };
       return {
         ...prev,
         [currentDate]: { ...dayData, [workerId]: { ...workerData, [field]: value } }
@@ -374,17 +373,36 @@ export default function App() {
   const weeklyData = useMemo(() => {
     const weekDates = getDatesOfWeek(currentWeekStart);
     const weekOverrides = weeklyOverrides[currentWeekStart] || {};
+    
     return workers.map((worker) => {
       let daysWorked = 0;
       let totalAdvancesThisWeek = 0;
+      let gpayAdvances = 0;
+      let cashAdvances = 0;
+      
       weekDates.forEach(date => {
         const dayRecord = attendance[date]?.[worker.id];
         if (dayRecord?.present) daysWorked += 1;
-        if (dayRecord?.advance) totalAdvancesThisWeek += parseInt(dayRecord.advance || 0, 10);
+        if (dayRecord?.advance) {
+          const advAmt = parseInt(dayRecord.advance || 0, 10);
+          totalAdvancesThisWeek += advAmt;
+          
+          if (dayRecord.advanceMethod === 'GPay') {
+            gpayAdvances += advAmt;
+          } else {
+            cashAdvances += advAmt;
+          }
+        }
       });
+      
       const totalEarned = daysWorked * worker.dailyWage;
       const totalAdvances = totalAdvancesThisWeek + (worker.loanBalance || 0);
+      
+      // Calculate normal payout (not less than zero)
       const calcFinalPayout = Math.max(0, totalEarned - totalAdvances);
+      
+      // Calculate excess debt if advances are greater than earnings
+      const calcCarryOver = Math.max(0, totalAdvances - totalEarned);
       
       const override = weekOverrides[worker.id];
       return {
@@ -392,6 +410,9 @@ export default function App() {
         daysWorked,
         totalEarned,
         totalAdvances,
+        gpayAdvances,
+        cashAdvances,
+        carryOver: calcCarryOver,
         finalPayout: override && override.finalPayout !== undefined ? override.finalPayout : calcFinalPayout,
         isOverridden: !!override
       };
@@ -511,8 +532,8 @@ export default function App() {
   };
 
   const exportWeeklyCSV = () => {
-    const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay'];
-    const rows = weeklyData.map(d => [escapeCSV(d.name), d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout]);
+    const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay', 'Excess Debt (Carry Over)'];
+    const rows = weeklyData.map(d => [escapeCSV(d.name), d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout, d.carryOver]);
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -554,13 +575,13 @@ export default function App() {
   };
 
   const exportMasterAttendanceCSV = () => {
-    const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)'];
+    const headers = ['Date', 'Worker Name', 'Assigned Site', 'Present', 'Advance Given (₹)', 'Advance Method'];
     const rows = [];
     Object.entries(attendance).forEach(([dateStr, dayData]) => {
       if (exportYear !== 'All' && !dateStr.startsWith(exportYear)) return;
       Object.entries(dayData).forEach(([workerId, record]) => {
         const worker = workers.find((w) => w.id.toString() === workerId);
-        if (worker) rows.push([dateStr, escapeCSV(worker.name), escapeCSV(record.site || 'None'), record.present ? 'Yes' : 'No', record.advance || 0]);
+        if (worker) rows.push([dateStr, escapeCSV(worker.name), escapeCSV(record.site || 'None'), record.present ? 'Yes' : 'No', record.advance || 0, escapeCSV(record.advanceMethod || 'Cash')]);
       });
     });
     rows.sort((a, b) => b[0].localeCompare(a[0]));
@@ -680,13 +701,13 @@ export default function App() {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
-                  <tr><th className="p-4">Worker</th><th className="p-4 text-center">Present</th><th className="p-4">Site</th><th className="p-4">Advance</th></tr>
+                  <tr><th className="p-4">Worker</th><th className="p-4 text-center">Present</th><th className="p-4">Site</th><th className="p-4">Advance & Method</th></tr>
                 </thead>
                 <tbody>
                   {workers.length === 0 ? (
                     <tr><td colSpan={4} className="p-8 text-center text-slate-400">Add workers in the Manage tab to begin.</td></tr>
                   ) : workers.map((worker) => {
-                    const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '' };
+                    const data = attendance[currentDate]?.[worker.id] || { present: false, site: '', advance: '', advanceMethod: 'Cash' };
                     return (
                       <tr key={worker.id} className="border-b hover:bg-slate-50 transition-colors">
                         <td className="p-4 font-medium">{worker.name} {role === 'admin' && <span className="text-[10px] text-slate-400 block font-bold">₹{worker.dailyWage}/DAY</span>}</td>
@@ -700,7 +721,16 @@ export default function App() {
                           </select>
                         </td>
                         <td className="p-4">
-                          <input type="number" value={data.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 border rounded text-sm bg-white" placeholder="₹ 0" />
+                          <div className="flex items-center gap-1">
+                            <div className="relative flex-1">
+                              <span className="absolute left-2 top-2 text-slate-400 text-sm">₹</span>
+                              <input type="number" value={data.advance || ''} onChange={(e) => handleAttendanceChange(worker.id, 'advance', e.target.value)} disabled={role !== 'admin'} className="w-full p-2 pl-6 border rounded text-sm bg-white" placeholder="0" />
+                            </div>
+                            <select value={data.advanceMethod || 'Cash'} onChange={(e) => handleAttendanceChange(worker.id, 'advanceMethod', e.target.value)} disabled={role !== 'admin' || !data.advance} className="p-2 border rounded text-sm bg-white">
+                              <option value="Cash">Cash</option>
+                              <option value="GPay">GPay</option>
+                            </select>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -834,7 +864,7 @@ export default function App() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-slate-100 font-bold text-xs uppercase text-slate-500">
-                  <tr><th className="p-4 border-b">Worker</th><th className="p-4 text-center border-b">Days</th><th className="p-4 text-right border-b">Earned</th><th className="p-4 text-right border-b">Advance</th><th className="p-4 text-right border-b font-bold text-slate-800 bg-slate-200">Final Payout</th></tr>
+                  <tr><th className="p-4 border-b">Worker</th><th className="p-4 text-center border-b">Days</th><th className="p-4 text-right border-b">Earned</th><th className="p-4 text-right border-b">Advance</th><th className="p-4 text-right border-b font-bold text-slate-800 bg-slate-200">Final Payout</th><th className="p-4 text-right border-b font-bold text-red-600 bg-red-50">Excess (Carry Over)</th></tr>
                 </thead>
                 <tbody className="text-sm">
                   {weeklyData.map((w) => (
@@ -842,8 +872,16 @@ export default function App() {
                       <td className="p-4 font-bold">{w.name}</td>
                       <td className="p-4 text-center font-bold text-blue-600">{w.daysWorked}</td>
                       <td className="p-4 text-right">₹{w.totalEarned}</td>
-                      <td className="p-4 text-right text-red-600">₹{w.totalAdvances}</td>
-                      <td className="p-4 text-right font-bold text-lg bg-green-50 text-green-800">
+                      <td className="p-4 text-right text-red-600">
+                        ₹{w.totalAdvances}
+                        {(w.gpayAdvances > 0 || w.cashAdvances > 0) && (
+                          <div className="text-[10px] text-slate-400 font-normal leading-tight mt-1">
+                            {w.cashAdvances > 0 && <span>Cash: ₹{w.cashAdvances}<br/></span>}
+                            {w.gpayAdvances > 0 && <span>GPay: ₹{w.gpayAdvances}</span>}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4 text-right font-bold text-lg bg-slate-50 text-green-800">
                         {isEditingSettlement && role === 'admin' ? (
                           <div className="flex items-center justify-end gap-2">
                             <input type="number" value={w.finalPayout} onChange={(e) => handleOverrideChange(w.id, 'finalPayout', e.target.value)} className="w-20 p-1 border border-indigo-400 rounded text-right text-sm bg-white" /> 
@@ -852,6 +890,9 @@ export default function App() {
                         ) : (
                            <span className={w.isOverridden ? "text-indigo-600 underline decoration-dotted" : ""}>₹{w.finalPayout}</span>
                         )}
+                      </td>
+                      <td className="p-4 text-right font-bold text-lg bg-red-50 text-red-800">
+                        {w.carryOver > 0 ? `₹${w.carryOver}` : '-'}
                       </td>
                     </tr>
                   ))}
