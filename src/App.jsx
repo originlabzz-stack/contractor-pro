@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
-  Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
+  Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
   RotateCcw, Edit2, X, Database, Save, IndianRupee, Printer, Briefcase
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
