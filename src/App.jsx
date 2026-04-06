@@ -35,7 +35,6 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
-
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -505,8 +504,10 @@ export default function App() {
       
       let workerCount = 0;
       if (attendance[dateStr]) {
-        Object.values(attendance[dateStr]).forEach(record => {
-          if (record.present && record.site === calendarSite) {
+        Object.entries(attendance[dateStr]).forEach(([workerId, record]) => {
+          // Double-check that the worker hasn't been deleted
+          const workerExists = workers.some(w => w.id.toString() === workerId.toString());
+          if (workerExists && record.present && record.site === calendarSite) {
             workerCount++;
           }
         });
@@ -528,7 +529,7 @@ export default function App() {
       });
     }
     return { days, blankStartDays: firstDayOfMonth };
-  }, [calendarMonth, calendarSite, attendance, siteExpenses]);
+  }, [calendarMonth, calendarSite, attendance, siteExpenses, workers]);
 
   // --- Exports ---
   const utf8BOM = "\uFEFF"; 
