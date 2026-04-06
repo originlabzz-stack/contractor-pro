@@ -35,6 +35,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID,
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
+
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -419,6 +420,16 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart, weeklyOverrides]);
 
+  // Calculate totals for the entire week across all workers
+  const weeklyTotals = useMemo(() => {
+    return weeklyData.reduce((acc, curr) => ({
+      earned: acc.earned + curr.totalEarned,
+      advances: acc.advances + curr.totalAdvances,
+      payout: acc.payout + curr.finalPayout,
+      carryOver: acc.carryOver + curr.carryOver
+    }), { earned: 0, advances: 0, payout: 0, carryOver: 0 });
+  }, [weeklyData]);
+
   const handleOverrideChange = (workerId, field, value) => {
     setWeeklyOverrides((prev) => {
       const weekData = prev[currentWeekStart] || {};
@@ -534,6 +545,10 @@ export default function App() {
   const exportWeeklyCSV = () => {
     const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay', 'Excess Debt (Carry Over)'];
     const rows = weeklyData.map(d => [escapeCSV(d.name), d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout, d.carryOver]);
+    
+    // Add Totals Row to Export
+    rows.push(['GRAND TOTALS', '', weeklyTotals.earned, weeklyTotals.advances, weeklyTotals.payout, weeklyTotals.carryOver]);
+
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -897,6 +912,15 @@ export default function App() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="bg-slate-200 font-bold text-slate-800">
+                  <tr>
+                    <td colSpan="2" className="p-4 text-right">GRAND TOTALS:</td>
+                    <td className="p-4 text-right text-green-700">₹{weeklyTotals.earned}</td>
+                    <td className="p-4 text-right text-red-600">₹{weeklyTotals.advances}</td>
+                    <td className="p-4 text-right text-green-800 text-lg">₹{weeklyTotals.payout}</td>
+                    <td className="p-4 text-right text-red-800 text-lg">₹{weeklyTotals.carryOver}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
