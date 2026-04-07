@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
-  Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
+  Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
   RotateCcw, Edit2, X, Database, Save, IndianRupee, Printer, Briefcase
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -100,7 +100,6 @@ export default function App() {
   const [calendarSite, setCalendarSite] = useState('');
 
   const [user, setUser] = useState(null);
-  const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState(isConfigValid ? 'Connecting...' : 'Offline Mode');
 
   // --- Auth logic ---
@@ -127,7 +126,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Data Fetching ---
+  // --- Data Fetching (Real-time listener) ---
   useEffect(() => {
     if (!user || !db) return;
     const docRef = doc(db, 'dashboard_data', appId);
@@ -143,7 +142,6 @@ export default function App() {
         if (data.inventory) setInventory(data.inventory);
         if (data.clientPayments) setClientPayments(data.clientPayments);
       }
-      setIsCloudSynced(true);
       setSyncStatus('Synced');
     }, (err) => {
       console.error("Firestore error", err);
@@ -152,26 +150,21 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  // --- Auto-Save logic ---
-  useEffect(() => {
-    if (!user || !db || !isCloudSynced || role !== 'admin') return; 
-    setSyncStatus('Saving...');
-    const saveData = async () => {
-      try {
-        const docRef = doc(db, 'dashboard_data', appId);
-        await setDoc(docRef, { 
-          workers, sites, clients, attendance, siteExpenses, weeklyOverrides, inventory, clientPayments,
-          lastUpdated: new Date().toISOString()
-        });
-        setSyncStatus('Synced');
-      } catch (error) {
-        console.error("Save error", error);
-        setSyncStatus('Error');
-      }
-    };
-    const timeoutId = setTimeout(saveData, 1500); 
-    return () => clearTimeout(timeoutId);
-  }, [workers, sites, clients, attendance, siteExpenses, weeklyOverrides, inventory, clientPayments, isCloudSynced, user, role]);
+  // --- NEW: Instant targeted save function ---
+  const saveToFirebase = async (updates) => {
+    if (!db || role !== 'admin') return;
+    try {
+      setSyncStatus('Saving...');
+      const docRef = doc(db, 'dashboard_data', appId);
+      // { merge: true } means it only updates the specific fields you pass in, 
+      // preventing other devices from overwriting changes!
+      await setDoc(docRef, { ...updates, lastUpdated: new Date().toISOString() }, { merge: true });
+      setSyncStatus('Synced');
+    } catch (error) {
+      console.error("Save error", error);
+      setSyncStatus('Error');
+    }
+  };
   
   const handleSecureLogin = async (e) => {
     e.preventDefault();
@@ -183,7 +176,6 @@ export default function App() {
         setLoginError('Please enter both email and password');
         return;
       }
-
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       const adminRef = collection(db, 'admins');
       const adminQuery = query(adminRef, where('uid', '==', userCredential.user.uid));
@@ -239,26 +231,31 @@ export default function App() {
     }
   };
 
+  // --- Handlers (Now with Instant Cloud Sync) ---
+  
   const handleAttendanceChange = (workerId, field, value) => {
     if (role !== 'admin') return; 
     setAttendance((prev) => {
       const dayData = prev[currentDate] || {};
       const workerData = dayData[workerId] || { present: false, site: '', advance: 0, advanceMethod: 'Cash' };
-      return {
+      const newAttendance = {
         ...prev,
         [currentDate]: { ...dayData, [workerId]: { ...workerData, [field]: value } }
       };
+      saveToFirebase({ attendance: newAttendance });
+      return newAttendance;
     });
   };
 
-  // --- Manage Handlers ---
   const handleAddWorker = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const name = formData.get('name');
     const wage = parseInt(formData.get('wage'), 10);
     if (name && !isNaN(wage)) {
-      setWorkers([...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }]);
+      const newWorkers = [...workers, { id: Date.now(), name, dailyWage: wage, loanBalance: 0 }];
+      setWorkers(newWorkers);
+      saveToFirebase({ workers: newWorkers });
       e.target.reset();
     }
   };
@@ -268,7 +265,9 @@ export default function App() {
     const formData = new FormData(e.target);
     const site = formData.get('site');
     if (site && !sites.includes(site)) {
-      setSites([...sites, site]);
+      const newSites = [...sites, site];
+      setSites(newSites);
+      saveToFirebase({ sites: newSites });
       e.target.reset();
     }
   };
@@ -278,16 +277,34 @@ export default function App() {
     const formData = new FormData(e.target);
     const client = formData.get('client');
     if (client && !clients.includes(client)) {
-      setClients([...clients, client]);
+      const newClients = [...clients, client];
+      setClients(newClients);
+      saveToFirebase({ clients: newClients });
       e.target.reset();
     }
   };
 
-  const handleDeleteWorker = (id) => { if (role === 'admin') setWorkers(workers.filter((w) => w.id !== id)); };
-  const handleDeleteSite = (site) => { if (role === 'admin') setSites(sites.filter((s) => s !== site)); };
-  const handleDeleteClient = (client) => { if (role === 'admin') setClients(clients.filter((c) => c !== client)); };
+  const handleDeleteWorker = (id) => { 
+    if (role !== 'admin') return;
+    const newWorkers = workers.filter((w) => w.id !== id);
+    setWorkers(newWorkers); 
+    saveToFirebase({ workers: newWorkers });
+  };
+  
+  const handleDeleteSite = (site) => { 
+    if (role !== 'admin') return;
+    const newSites = sites.filter((s) => s !== site);
+    setSites(newSites);
+    saveToFirebase({ sites: newSites });
+  };
+  
+  const handleDeleteClient = (client) => { 
+    if (role !== 'admin') return;
+    const newClients = clients.filter((c) => c !== client);
+    setClients(newClients); 
+    saveToFirebase({ clients: newClients });
+  };
 
-  // --- Expense Handlers ---
   const handleAddExpense = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -295,13 +312,18 @@ export default function App() {
     const desc = formData.get('desc');
     const amount = parseInt(formData.get('amount'), 10);
     if (site && desc && !isNaN(amount)) {
-      setSiteExpenses([...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }]);
+      const newExpenses = [...siteExpenses, { id: Date.now(), date: currentDate, site, description: desc, amount }];
+      setSiteExpenses(newExpenses);
+      saveToFirebase({ siteExpenses: newExpenses });
       e.target.reset();
     }
   };
 
   const handleDeleteExpense = (id) => {
-    if (role === 'admin') setSiteExpenses(siteExpenses.filter((e) => e.id !== id));
+    if (role !== 'admin') return;
+    const newExpenses = siteExpenses.filter((e) => e.id !== id);
+    setSiteExpenses(newExpenses);
+    saveToFirebase({ siteExpenses: newExpenses });
   };
 
   const startEditingExpense = (expense) => {
@@ -311,11 +333,13 @@ export default function App() {
 
   const saveEditedExpense = () => {
     if (!editExpenseData.site || !editExpenseData.desc || isNaN(editExpenseData.amount)) return;
-    setSiteExpenses(siteExpenses.map(exp => 
+    const newExpenses = siteExpenses.map(exp => 
       exp.id === editingExpenseId 
       ? { ...exp, site: editExpenseData.site, description: editExpenseData.desc, amount: parseInt(editExpenseData.amount, 10) }
       : exp
-    ));
+    );
+    setSiteExpenses(newExpenses);
+    saveToFirebase({ siteExpenses: newExpenses });
     setEditingExpenseId(null);
   };
 
@@ -323,7 +347,6 @@ export default function App() {
     setEditingExpenseId(null);
   };
 
-  // --- Payment Handlers ---
   const handleAddClientPayment = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -334,25 +357,30 @@ export default function App() {
     const remarks = formData.get('remarks') || '-';
 
     if (date && client && !isNaN(amount)) {
-      setClientPayments([...clientPayments, { id: Date.now(), date, client, amount, mode, remarks }]);
+      const newPayments = [...clientPayments, { id: Date.now(), date, client, amount, mode, remarks }];
+      setClientPayments(newPayments);
+      saveToFirebase({ clientPayments: newPayments });
       e.target.reset();
-      // Keep the selected date and client to make bulk entry easier
       e.target.date.value = date;
       e.target.client.value = client;
     }
   };
 
   const handleDeletePayment = (id) => {
-    if (role === 'admin') setClientPayments(clientPayments.filter(p => p.id !== id));
+    if (role !== 'admin') return;
+    const newPayments = clientPayments.filter(p => p.id !== id);
+    setClientPayments(newPayments);
+    saveToFirebase({ clientPayments: newPayments });
   };
 
-  // --- Tools Handlers ---
   const handleAddTool = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const name = formData.get('name');
     if (name) {
-      setInventory([...inventory, { id: Date.now(), name, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }]);
+      const newInventory = [...inventory, { id: Date.now(), name, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' }];
+      setInventory(newInventory);
+      saveToFirebase({ inventory: newInventory });
       e.target.reset();
     }
   };
@@ -365,35 +393,42 @@ export default function App() {
     const site = formData.get('site');
     if (toolId && workerId && site) {
       const worker = workers.find((w) => w.id.toString() === workerId);
-      setInventory(inventory.map((tool) => 
+      const newInventory = inventory.map((tool) => 
         tool.id === toolId 
         ? { ...tool, status: 'Assigned', assignedWorker: worker?.name || 'Unknown', assignedSite: site, checkoutDate: currentDate } 
         : tool
-      ));
+      );
+      setInventory(newInventory);
+      saveToFirebase({ inventory: newInventory });
       e.target.reset();
     }
   };
 
   const handleReturnTool = (toolId) => {
     if (role !== 'admin') return;
-    setInventory(inventory.map((tool) => 
+    const newInventory = inventory.map((tool) => 
       tool.id === toolId 
       ? { ...tool, status: 'Available', assignedWorker: '', assignedSite: '', checkoutDate: '' } 
       : tool
-    ));
+    );
+    setInventory(newInventory);
+    saveToFirebase({ inventory: newInventory });
   };
 
   const handleDeleteTool = (toolId) => {
     if (role !== 'admin') return;
-    setInventory(inventory.filter((t) => t.id !== toolId));
+    const newInventory = inventory.filter((t) => t.id !== toolId);
+    setInventory(newInventory);
+    saveToFirebase({ inventory: newInventory });
   };
 
   const handleClearData = () => {
     setAttendance({});
-    setSiteExpenses({});
+    setSiteExpenses([]);
     setWeeklyOverrides({});
     setClientPayments([]);
     setConfirmClear(false);
+    saveToFirebase({ attendance: {}, siteExpenses: [], weeklyOverrides: {}, clientPayments: [] });
   };
 
   const getStartOfWeek = (dateString) => {
@@ -445,11 +480,7 @@ export default function App() {
       
       const totalEarned = daysWorked * worker.dailyWage;
       const totalAdvances = totalAdvancesThisWeek + (worker.loanBalance || 0);
-      
-      // Calculate normal payout (not less than zero)
       const calcFinalPayout = Math.max(0, totalEarned - totalAdvances);
-      
-      // Calculate excess debt if advances are greater than earnings
       const calcCarryOver = Math.max(0, totalAdvances - totalEarned);
       
       const override = weekOverrides[worker.id];
@@ -467,7 +498,6 @@ export default function App() {
     });
   }, [workers, attendance, currentWeekStart, weeklyOverrides]);
 
-  // Calculate totals for the entire week across all workers
   const weeklyTotals = useMemo(() => {
     return weeklyData.reduce((acc, curr) => ({
       earned: acc.earned + curr.totalEarned,
@@ -483,10 +513,12 @@ export default function App() {
       const workerOverride = weekData[workerId] || {
         finalPayout: weeklyData.find((w) => w.id === workerId)?.calcFinalPayout || 0
       };
-      return {
+      const newOverrides = {
         ...prev,
         [currentWeekStart]: { ...weekData, [workerId]: { ...workerOverride, [field]: value === '' ? '' : parseInt(value, 10) || 0 } }
       };
+      saveToFirebase({ weeklyOverrides: newOverrides });
+      return newOverrides;
     });
   };
 
@@ -495,7 +527,9 @@ export default function App() {
       if (!prev[currentWeekStart]) return prev;
       const weekData = { ...prev[currentWeekStart] };
       delete weekData[workerId];
-      return { ...prev, [currentWeekStart]: weekData };
+      const newOverrides = { ...prev, [currentWeekStart]: weekData };
+      saveToFirebase({ weeklyOverrides: newOverrides });
+      return newOverrides;
     });
   };
 
@@ -545,7 +579,7 @@ export default function App() {
     if (!calendarSite) return { days: [], blankStartDays: 0 };
     const [year, month] = calendarMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
-    const firstDayOfMonth = new Date(year, month - 1, 1).getDay(); // 0 (Sun) to 6 (Sat)
+    const firstDayOfMonth = new Date(year, month - 1, 1).getDay();
 
     const days = [];
     for (let i = 1; i <= daysInMonth; i++) {
@@ -663,7 +697,6 @@ export default function App() {
     const headers = ['Worker', 'Days Worked', 'Total Earned', 'Total Advances Taken', 'Final Cash to Pay', 'Excess Debt (Carry Over)'];
     const rows = weeklyData.map(d => [escapeCSV(d.name), d.daysWorked, d.totalEarned, d.totalAdvances, d.finalPayout, d.carryOver]);
     
-    // Add Totals Row to Export
     rows.push(['GRAND TOTALS', '', weeklyTotals.earned, weeklyTotals.advances, weeklyTotals.payout, weeklyTotals.carryOver]);
 
     const csvContent = "data:text/csv;charset=utf-8," + utf8BOM + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -756,7 +789,6 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
   };
-
 
   // --- Component Renders ---
   if (!isConfigValid) {
@@ -1217,9 +1249,9 @@ export default function App() {
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors font-bold shadow-sm flex items-center justify-center gap-2"><Plus size={16} /> Add Worker</button>
               </form>
               <div className="mt-4 space-y-1">
-                {workers.map((w) => (
+                {workers.map((w, i) => (
                   <div key={w.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
-                    <span className="text-sm font-medium">{w.name} (₹{w.dailyWage})</span>
+                    <span className="text-sm font-medium">{i + 1}. {w.name} <span className="text-slate-500 font-normal">(₹{w.dailyWage})</span></span>
                     <button onClick={() => handleDeleteWorker(w.id)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
@@ -1235,7 +1267,7 @@ export default function App() {
               <div className="mt-4 space-y-1">
                 {sites.map((s, i) => (
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
-                    <span className="text-sm font-medium">{s}</span>
+                    <span className="text-sm font-medium">{i + 1}. {s}</span>
                     <button onClick={() => handleDeleteSite(s)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
@@ -1251,7 +1283,7 @@ export default function App() {
               <div className="mt-4 space-y-1">
                 {clients.map((c, i) => (
                   <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded border group">
-                    <span className="text-sm font-medium">{c}</span>
+                    <span className="text-sm font-medium">{i + 1}. {c}</span>
                     <button onClick={() => handleDeleteClient(c)} className="text-red-300 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
                   </div>
                 ))}
@@ -1267,7 +1299,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-xs text-blue-800 font-bold uppercase tracking-wider mb-1">Sync Info</p>
-                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Database size={14} /> Connection: {syncStatus}</p>
+                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Cloud size={14} /> Connection: {syncStatus}</p>
               </div>
               
               <div className="border-t border-b py-4 space-y-3">
