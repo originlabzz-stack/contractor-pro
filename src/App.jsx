@@ -36,6 +36,7 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_MEASUREMENT_ID
 };
 
+
 // =========================================================
 // FIREBASE INITIALIZATION
 // =========================================================
@@ -867,7 +868,6 @@ export default function App() {
               <Building className="text-yellow-400 shrink-0" />
               <h1 className="text-lg sm:text-xl font-bold truncate">Contractor Pro</h1>
               <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold shrink-0">{role}</span>
-              <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider hidden sm:flex items-center gap-1 shrink-0"><Cloud size={10} /> {syncStatus}</span>
             </div>
             
             {/* Hamburger Toggle */}
@@ -1328,7 +1328,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-xs text-blue-800 font-bold uppercase tracking-wider mb-1">Sync Info</p>
-                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Database size={14} /> Connection: {syncStatus}</p>
+                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Cloud size={14} /> Connection: {syncStatus}</p>
               </div>
               
               <div className="border-t border-b py-4 space-y-3">
