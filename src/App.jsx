@@ -3,7 +3,7 @@ import {
   Users, Building, Calendar, ClipboardList, Wallet, 
   Plus, FileSpreadsheet, Receipt, Trash2, Download, 
   Cloud, Settings, Lock, Eye, LogOut, Wrench, AlertTriangle, 
-  RotateCcw, Edit2, X, Save, IndianRupee, Printer, Briefcase
+  RotateCcw, Edit2, X, Save, IndianRupee, Printer, Briefcase, Menu
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -67,6 +67,7 @@ export default function App() {
   const [setupError, setSetupError] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Master Data States
   const [workers, setWorkers] = useState([]);
@@ -156,8 +157,6 @@ export default function App() {
     try {
       setSyncStatus('Saving...');
       const docRef = doc(db, 'dashboard_data', appId);
-      // { merge: true } means it only updates the specific fields you pass in, 
-      // preventing other devices from overwriting changes!
       await setDoc(docRef, { ...updates, lastUpdated: new Date().toISOString() }, { merge: true });
       setSyncStatus('Synced');
     } catch (error) {
@@ -229,6 +228,12 @@ export default function App() {
     } catch (error) {
       setSetupError(error.message);
     }
+  };
+
+  const handleLogout = () => {
+    setRole(null);
+    setIsMobileMenuOpen(false);
+    setActiveTab('daily');
   };
 
   // --- Handlers (Now with Instant Cloud Sync) ---
@@ -790,6 +795,17 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // --- UI Helpers ---
+  const NavButton = ({ tab, icon: Icon, label }) => (
+    <button 
+      onClick={() => { setActiveTab(tab); setIsMobileMenuOpen(false); }} 
+      className={`px-3 py-3 lg:py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-3 lg:gap-2 whitespace-nowrap ${activeTab === tab ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700 lg:hover:bg-transparent'}`}
+    >
+      <Icon size={18} className="lg:w-3.5 lg:h-3.5" /> 
+      <span>{label}</span>
+    </button>
+  );
+
   // --- Component Renders ---
   if (!isConfigValid) {
     return (
@@ -845,29 +861,41 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <header className="bg-slate-900 text-white p-4 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+        <div className="max-w-6xl mx-auto flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
           <div className="flex items-center justify-between w-full lg:w-auto">
             <div className="flex items-center gap-2">
-              <Building className="text-yellow-400" />
-              <h1 className="text-xl font-bold">Contractor Pro</h1>
-              <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{role}</span>
-              <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider flex items-center gap-1"><Cloud size={10} /> {syncStatus}</span>
+              <Building className="text-yellow-400 shrink-0" />
+              <h1 className="text-lg sm:text-xl font-bold truncate">Contractor Pro</h1>
+              <span className="bg-blue-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold shrink-0">{role}</span>
+              <span className="text-[10px] text-slate-400 ml-2 uppercase font-bold tracking-wider hidden sm:flex items-center gap-1 shrink-0"><Cloud size={10} /> {syncStatus}</span>
             </div>
+            
+            {/* Hamburger Toggle */}
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+              className="lg:hidden p-2 -mr-2 text-slate-400 hover:text-white transition-colors"
+            >
+              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
-          <nav className="flex bg-slate-800 rounded-lg p-1 overflow-x-auto w-full lg:w-auto hide-scrollbar">
-            <button onClick={() => setActiveTab('daily')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'daily' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><ClipboardList size={14}/> Daily Log</button>
-            <button onClick={() => setActiveTab('calendar')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'calendar' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Calendar size={14}/> Site Calendar</button>
-            <button onClick={() => setActiveTab('weekly')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'weekly' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wallet size={14}/> Settlement</button>
+          
+          <nav className={`${isMobileMenuOpen ? 'flex' : 'hidden'} lg:flex flex-col lg:flex-row bg-slate-800 lg:bg-transparent rounded-lg p-2 lg:p-0 w-full lg:w-auto gap-1 lg:gap-1`}>
+            <NavButton tab="daily" icon={ClipboardList} label="Daily Log" />
+            <NavButton tab="calendar" icon={Calendar} label="Site Calendar" />
+            <NavButton tab="weekly" icon={Wallet} label="Settlement" />
             {role === 'admin' && (
               <>
-                <button onClick={() => setActiveTab('payments')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'payments' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><IndianRupee size={14}/> Payments</button>
-                <button onClick={() => setActiveTab('reports')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'reports' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><FileSpreadsheet size={14}/> Reports</button>
-                <button onClick={() => setActiveTab('tools')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'tools' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Wrench size={14}/> Tools</button>
-                <button onClick={() => setActiveTab('manage')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'manage' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Users size={14}/> Manage</button>
-                <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-blue-600' : 'text-slate-400 hover:text-white'}`}><Settings size={14}/> Settings</button>
+                <NavButton tab="payments" icon={IndianRupee} label="Payments" />
+                <NavButton tab="reports" icon={FileSpreadsheet} label="Reports" />
+                <NavButton tab="tools" icon={Wrench} label="Tools" />
+                <NavButton tab="manage" icon={Users} label="Manage" />
+                <NavButton tab="settings" icon={Settings} label="Settings" />
               </>
             )}
-            <button onClick={() => setRole(null)} className="p-1.5 text-slate-500 hover:text-red-400 ml-2"><LogOut size={18} /></button>
+            <div className="h-px bg-slate-700 my-1 lg:hidden"></div>
+            <button onClick={handleLogout} className="px-3 py-3 lg:p-1.5 text-slate-400 hover:text-red-400 lg:ml-2 flex items-center gap-3 lg:gap-2 text-sm font-medium lg:hover:bg-transparent hover:bg-slate-700 rounded-md transition-colors w-full lg:w-auto mt-1 lg:mt-0">
+              <LogOut size={18} className="lg:w-[18px] lg:h-[18px]" /> <span className="lg:hidden">Logout</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -1036,11 +1064,11 @@ export default function App() {
             <div className="p-6 border-b bg-slate-50 flex justify-between items-center flex-wrap gap-4">
               <h2 className="text-lg font-bold flex items-center gap-2"><Wallet className="text-green-600" /> Settlement for {currentWeekStart}</h2>
               {role === 'admin' && (
-                <div className="flex gap-2">
-                  <button onClick={() => setIsEditingSettlement(!isEditingSettlement)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors">
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button onClick={() => setIsEditingSettlement(!isEditingSettlement)} className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 transition-colors">
                     {isEditingSettlement ? <><X size={14}/> Finish Editing</> : <><Edit2 size={14}/> Manual Edit</>}
                   </button>
-                  <button onClick={exportWeeklyCSV} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition-colors"><Download size={14} /> Export CSV</button>
+                  <button onClick={exportWeeklyCSV} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"><Download size={14} /> Export CSV</button>
                 </div>
               )}
             </div>
@@ -1102,33 +1130,33 @@ export default function App() {
             </div>
             <div className="p-6 border-b border-slate-200 bg-white">
               <form onSubmit={handleAddClientPayment} className="flex flex-wrap gap-3 items-end">
-                <input required name="date" type="date" defaultValue={currentDate} className="p-2 border border-slate-300 rounded text-sm bg-white" />
+                <input required name="date" type="date" defaultValue={currentDate} className="w-full sm:w-auto p-2 border border-slate-300 rounded text-sm bg-white" />
                 <select required name="client" className="flex-1 min-w-[150px] p-2 border border-slate-300 rounded text-sm bg-white">
                   <option value="">Select Client...</option>
                   {clients.map((c, i) => <option key={i} value={c}>{c}</option>)}
                 </select>
                 <input required name="amount" type="number" placeholder="Amount Received" className="flex-1 min-w-[120px] p-2 border border-slate-300 rounded text-sm" />
-                <select required name="mode" className="p-2 border border-slate-300 rounded text-sm bg-white">
+                <select required name="mode" className="w-full sm:w-auto p-2 border border-slate-300 rounded text-sm bg-white">
                   <option value="Cash">Cash</option>
                   <option value="GPay">GPay</option>
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="Cheque">Cheque</option>
                 </select>
-                <input name="remarks" placeholder="Remarks (optional)" className="flex-[2] min-w-[150px] p-2 border border-slate-300 rounded text-sm" />
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded transition-colors font-bold shadow-sm px-6">Add</button>
+                <input name="remarks" placeholder="Remarks (optional)" className="w-full sm:flex-[2] min-w-[150px] p-2 border border-slate-300 rounded text-sm" />
+                <button type="submit" className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded transition-colors font-bold shadow-sm px-6">Add</button>
               </form>
             </div>
             
-            <div className="p-4 bg-slate-50 flex justify-between items-center border-b border-slate-200">
-               <div className="flex items-center gap-2">
-                 <span className="text-sm font-bold text-slate-600">Filter View:</span>
-                 <select value={paymentFilterClient} onChange={(e) => setPaymentFilterClient(e.target.value)} className="p-1.5 border border-slate-300 rounded text-sm bg-white">
+            <div className="p-4 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200">
+               <div className="flex items-center gap-2 w-full sm:w-auto">
+                 <span className="text-sm font-bold text-slate-600 whitespace-nowrap">Filter View:</span>
+                 <select value={paymentFilterClient} onChange={(e) => setPaymentFilterClient(e.target.value)} className="w-full sm:w-auto p-1.5 border border-slate-300 rounded text-sm bg-white">
                    <option value="">All Clients</option>
                    {clients.map((c, i) => <option key={i} value={c}>{c}</option>)}
                  </select>
                </div>
                {paymentFilterClient && (
-                 <button onClick={() => printClientStatement(paymentFilterClient)} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition-colors"><Printer size={14} /> Print Statement</button>
+                 <button onClick={() => printClientStatement(paymentFilterClient)} className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"><Printer size={14} /> Print Statement</button>
                )}
             </div>
 
@@ -1178,8 +1206,8 @@ export default function App() {
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><FileSpreadsheet className="text-indigo-600" /> Site Ledger</h2>
               </div>
               <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-                <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white font-bold"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select>
-                {reportPeriodType === 'monthly' ? <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" /> : <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm bg-white" />}
+                <select value={reportPeriodType} onChange={(e) => setReportPeriodType(e.target.value)} className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white font-bold"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select>
+                {reportPeriodType === 'monthly' ? <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white" /> : <input type="date" value={reportWeekDate} onChange={(e) => setReportWeekDate(e.target.value)} className="w-full sm:w-auto p-2 border border-slate-300 rounded-lg text-sm bg-white" />}
                 <select value={reportSite} onChange={(e) => setReportSite(e.target.value)} className="flex-grow p-2 border border-slate-300 rounded-lg text-sm bg-white"><option value="">Choose Site...</option>{sites.map((s, i) => <option key={i} value={s}>{s}</option>)}</select>
               </div>
             </div>
@@ -1300,7 +1328,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-xs text-blue-800 font-bold uppercase tracking-wider mb-1">Sync Info</p>
-                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Cloud size={14} /> Connection: {syncStatus}</p>
+                <p className="text-sm text-blue-700 flex items-center gap-2 font-bold"><Database size={14} /> Connection: {syncStatus}</p>
               </div>
               
               <div className="border-t border-b py-4 space-y-3">
